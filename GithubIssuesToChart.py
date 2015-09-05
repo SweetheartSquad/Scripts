@@ -23,22 +23,35 @@ repoName = args[1]
 username = args[2]
 password = args[3]
 
-out = '''\\documentclass{article}
-\\newcommand{\\boxSize}{12em}
+out = '''\\documentclass{standalone}
 
-\\usepackage{tikz}
 \\usepackage{hyperref}
-\\usepackage[
-paperwidth=100in,paperheight=10in, %pagesize
-top=0pt, right=0pt, left=0pt, bottom=0pt %margins
-]{geometry}
-\\usetikzlibrary{arrows,shapes,positioning,trees}
+\\usepackage{tikz}
+
+% for matching content and document dimensions
+\\usepackage[paperwidth=\\maxdimen,paperheight=\\maxdimen]{geometry}
+\\usepackage[displaymath,tightp??age,active]{preview}
+
+% set default font to Helvetica
+\\RequirePackage[scaled]{helvet}
+\\renewcommand\\familydefault{\\sfdefault}
+\\RequirePackage[T1]{fontenc}
+
+% colours from SweetHeart Squad logo
+\\definecolor{shs1}{RGB}{169,55,216}
+\\definecolor{shs2}{RGB}{255,140,205}
+\\definecolor{shs3}{RGB}{209,52,131}
+\\definecolor{shs5}{RGB}{216,128,255}
+
+% configure tikz stuff
+\\newcommand{\\boxSize}{100pt}
+\\usetikzlibrary{positioning}
 \\tikzset{
-basic/.style   = {draw, text width=\\boxSize, font=\\sffamily, rectangle},
-root/.style    = {basic, thin, align=center, fill=green!30},
-level 1/.style = {sibling distance=\\boxSize+1em},
-level 2/.style = {basic, thin, align=center, fill=green!60, text width=\\boxSize},
-level 3/.style = {basic, thin, align=left, fill=pink!60, text width=\\boxSize-1em},
+basic/.style   = {draw, inner sep = 3pt, rectangle},
+root/.style    = {basic, align=left, minimum width=\\boxSize, font=\\Huge, fill=shs3, text=white},
+level 1/.style = {sibling distance=\\boxSize+10pt},
+level 2/.style = {basic, align=left, fill=shs5, text width=\\boxSize},
+level 3/.style = {basic, align=left, font=\\small, fill=shs2!25, text width=\\boxSize-10pt},
 edge from parent/.style={draw, edge from parent path={(\\tikzparentnode.south) -- +(0,-8pt) -| (\\tikzchildnode)}}
 }'''
 
@@ -55,6 +68,7 @@ repo = gh.repos.get(user=SHS, repo=repoName)
 # Start the tree
 out += '''
 \\begin{document}
+\\begin{preview}
 \\begin{tikzpicture}
 \\node[root] {\href{'''+repo.html_url+'''}{''' + repoName + '''}}'''
 
@@ -80,7 +94,7 @@ for i in range(0, len(milestones)):
         else:
             nodeNumBelow = str(i)+"_"+str(j-1)
 
-        out += '''\\node [below of = c'''+nodeNumBelow+'''] (c'''+nodeNum+''') {\href{'''+latexEncode(issues[j].html_url)+'''}{''' +str(i)+"."+str(j)+". " + latexEncode(issues[j].title) + '''}};\n'''
+        out += '''\\node [below= of c'''+nodeNumBelow+'''] (c'''+nodeNum+''') {\href{'''+latexEncode(issues[j].html_url)+'''}{''' +str(i)+"."+str(j)+". " + latexEncode(issues[j].title) + '''}};\n'''
     out += '''\\newcounter{numIssues''' + str(i) + '''}
 \\setcounter{numIssues''' + str(i) + '''}{''' + str(max(0,len(issues)-1)) + '''}\n\n'''
 
@@ -90,6 +104,7 @@ for i in range(0, len(milestones)):
     for j in range(0, len(milestone_issues_array[i])):
         out += '''\\draw[-] (c''' + str(i) + '''.west) |- (c''' + str(i) +"_"+ str(j) + '''.west);\n'''
 out += '''\\end{tikzpicture}
+\\end{preview}
 \\end{document}'''
 
 target = open(repoName + "-Chart.tex", 'w')
