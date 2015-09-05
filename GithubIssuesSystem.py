@@ -6,14 +6,70 @@ import re
 
 SHS = 'SweetheartSquad'
 
+startTime = 0
+endTime = 240
+now = 6
+
+GANTT_BEGIN = '''
+\\documentclass[tikz]{standalone}
+\\usepackage{pgfgantt}
+% set default font to Helvetica
+\\RequirePackage[scaled]{helvet}
+\\renewcommand\\familydefault{\\sfdefault}
+\\RequirePackage[T1]{fontenc}
+% colours from SweetHeart Squad logo
+\\definecolor{shs1}{RGB}{169,55,216}
+\\definecolor{shs2}{RGB}{255,140,205}
+\\definecolor{shs3}{RGB}{209,52,131}
+\\definecolor{shs5}{RGB}{216,128,255}
+
+\\begin{document}
+\\begin{ganttchart}[
+y unit chart = 15,
+y unit title = 15,
+canvas/.append style={fill=none, draw=none, line width=.75pt},
+% title
+title/.style={draw=none, fill=none},
+title label font=\\bfseries\\footnotesize,
+title label node/.append style={below=7pt},
+include title in canvas=false,
+% task bars
+bar label font=\\mdseries\\small\\color{black!70},
+bar label node/.append style={left=2cm},
+bar height=0.5,
+bar/.append style={draw=none, fill=shs3},
+bar incomplete/.append style={fill=shs2!25},
+% feature groups
+group/.append style={fill=shs3},
+group incomplete/.append style={fill=shs2},
+group left shift=0,
+group right shift=0,
+group height=0.8,
+group label node/.append style={left=.6cm},
+% milestones
+milestone inline label node/.append style={left=5mm},
+milestone/.append style={fill=black, rounded corners=0pt},
+milestone height=1,
+% milestone width=1,
+% "today" line
+today=''' + str(now) + ''',
+today rule/.style={
+  draw=shs3,
+  dash pattern=on 1.5pt off 0.5pt,
+  line width=1pt
+}]{''' + str(startTime) + '''}{''' + str(endTime) + '''}
+\\gantttitle{Weeks}{''' + str(endTime) + '''}\\\\
+\\gantttitlelist{''' + str(startTime) + ''',...,''' + str(endTime) + '''}{1}\\\\
+'''
+
 HOURS_IN_WORK_DAY = 8
 DAYS_IN_WORK_WEEK = 5
 
 def weeks_to_hours(weeks):
-    return HOURS_IN_WORK_DAY * DAYS_IN_WORK_WEEK * int(weeks)
+    return HOURS_IN_WORK_DAY * DAYS_IN_WORK_WEEK * float(weeks)
 
 def days_to_hours(days):
-    return HOURS_IN_WORK_DAY * int(days)
+    return HOURS_IN_WORK_DAY * float(days)
 
 args = sys.argv
 
@@ -26,6 +82,7 @@ password = args[3]
 
 auth = dict(login=username, password=password)
 gh = Github(**auth)
+
 
 def extract_total_hour_month_day(_input):
     hour_regex  = re.compile(ur'([0-9]*[h H])')
@@ -41,43 +98,58 @@ def extract_total_hour_month_day(_input):
     if len(hours_match) > 0:
         val = hours_match[0][:1]
         if val.isdigit():
-            total_hours += int(val)
+            total_hours += float(val)
 
     if len(days_match) > 0:
         val = days_match[0][:1]
         if val.isdigit():
-            total_hours += int(days_to_hours(val))
+            total_hours += float(days_to_hours(val))
 
     if len(weeks_match) > 0:
         val = weeks_match[0][:1]
         if val.isdigit():
-            total_hours += int(weeks_to_hours(val))
+            total_hours += float(weeks_to_hours(val))
 
     return(total_hours, hours_match, days_match, weeks_match)
 
-def calc_work_in_milestone(_issues):
+
+def calc_totals_for_issues(_issues):
+    for issue in _issues :
+        regex   = re.compile(ur'(~[0-9 a-z A-Z]*:[0-9 a-z A-Z]*)')
+        matches = regex.findall(issue.body)
+        params  = dict()
+
+        for match in matches:
+            match = match[1:]
+            key_val = match.split(":")
+            params[key_val[0]] = key_val[1]
+
+        if("estimate" in params):
+            setattr(issue, "estimate_literal", params["estimate"])
+            setattr(issue, "estimate_value", extract_total_hour_month_day(params["estimate"])[0])
+
+        setattr(issue, "params", params)
+    return _issues
+
+
+def calc_work_in_milestone(_milestone_issues):
     totals = dict()
     total  = 0
-    milestones = gh.issues.milestones.list(user=SHS, repo=repoName).all()
-    for milestone in milestones:
-        for issue in _issues:
-            if hasattr(issue, "estimate_value"):
-                total += issue.estimate_value
-                if milestone.title in totals:
-                    totals[milestone.title] += issue.estimate_value
-                else:
-                    totals[milestone.title] = issue.estimate_value
+    for issue in _milestone_issues:
+        if hasattr(issue, "estimate_value"):
+            total += issue.estimate_value
 
-    return (total, totals)
+    return total
+
 
 def quick_provide_estimate(_issues):
+    _issues = calc_totals_for_issues(_issues)
     for issue in _issues:
         if hasattr(issue, "estimate_value") == False:
-
             valid_input_entered = False
 
             while not valid_input_entered:
-                input = raw_input("Enter estimate for " + issue.title + "(" + issue.body + ")")
+                input = raw_input("Enter estimate for (" + issue.milestone.title + ") " + issue.title + "(" + issue.body + ")")
 
                 parsed_hours = extract_total_hour_month_day(input)[0]
 
@@ -90,23 +162,31 @@ def quick_provide_estimate(_issues):
                     print "Invalid input must be in the format 1w2d3h, 2d3h, 3h, 1w, etc"
 
 
-issues_global = gh.issues.list_by_repo(SHS, repoName).all()
+def create_gantt_chart():
+    ret = GANTT_BEGIN
+    _milestones = gh.issues.milestones.list(user=SHS, repo=repoName).all()
+    for i in range(0, len(_milestones)):
+        milestone_issues = gh.issues.list_by_repo(SHS, repoName, milestone=str(_milestones[i].number)).all()
+        milestone_issues =  calc_totals_for_issues(milestone_issues)
+        milestone_total = calc_work_in_milestone(milestone_issues)
+        duration = float(milestone_total)/float(HOURS_IN_WORK_DAY)/float(DAYS_IN_WORK_WEEK)
+        milestone_progress = 0
+        if len(milestone_issues) > 0:
+            milestone_progress = _milestones[i].closed_issues/len(milestone_issues)
+        ret += "\\ganttgroup[progress=" + str(milestone_progress) + "]{" + str(i) + ". " + _milestones[i].title + "}{0}{" + str(duration) + "}\\\\\n"
+        for j in range(0, len(milestone_issues)):
+            issue_duration = 0
+            if hasattr(milestone_issues[j], "estimate_value"):
+                issue_duration = float(milestone_issues[j].estimate_value)/float(HOURS_IN_WORK_DAY)/float(DAYS_IN_WORK_WEEK)
+            state = "0"
+            if milestone_issues[j].state == "closed":
+                state="100"
+            ret += "\\ganttbar[progress=" + state + "]{" + str(i) + "." + str(j) + ". " + str(milestone_issues[j].title) + "}{0}{" + str(issue_duration) + "}\\\\\n"
+    ret+="\\end{ganttchart}\n"
+    ret+="\\end{document}"
+    return ret
 
-for issue in issues_global :
-    regex   = re.compile(ur'(~[0-9 a-z A-Z]*:[0-9 a-z A-Z]*)')
-    matches = regex.findall(issue.body)
-    params  = dict()
+#issues_global = gh.issues.list_by_repo(SHS, repoName).all()
+quick_provide_estimate(gh.issues.list_by_repo(SHS, repoName).all())
 
-    for match in matches:
-        match = match[1:]
-        key_val = match.split(":")
-        params[key_val[0]] = key_val[1]
-
-    if("estimate" in params):
-        setattr(issue, "estimate_literal", params["estimate"])
-        setattr(issue, "estimate_value", extract_total_hour_month_day(params["estimate"]))
-
-    setattr(issue, "params", params)
-
-quick_provide_estimate(issues_global)
-
+print create_gantt_chart()
