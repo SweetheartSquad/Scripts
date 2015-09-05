@@ -3,6 +3,7 @@ __author__ = 'ryan'
 from pygithub3 import Github
 import sys
 import re
+import copy
 
 SHS = 'SweetheartSquad'
 
@@ -113,17 +114,30 @@ def extract_total_hour_month_day(_input):
     return(total_hours, hours_match, days_match, weeks_match)
 
 
+def get_extra_attributes(_object):
+    params  = dict()
+    regex   = re.compile(ur'(~[0-9 a-z A-Z]*:[0-9 a-z A-Z]*)')
+
+    matches = []
+
+    if hasattr(_object, "body"):
+        if _object.body is not None:
+            matches = regex.findall(_object.body)
+    else:
+        if _object.description is not None:
+            matches = regex.findall(_object.description)
+
+    for match in matches:
+        match = match[1:]
+        key_val = match.split(":")
+        params[key_val[0]] = key_val[1]
+
+    return params
+
+
 def calc_totals_for_issues(_issues):
     for issue in _issues :
-        regex   = re.compile(ur'(~[0-9 a-z A-Z]*:[0-9 a-z A-Z]*)')
-        matches = regex.findall(issue.body)
-        params  = dict()
-
-        for match in matches:
-            match = match[1:]
-            key_val = match.split(":")
-            params[key_val[0]] = key_val[1]
-
+        params = get_extra_attributes(issue)
         if("estimate" in params):
             setattr(issue, "estimate_literal", params["estimate"])
             setattr(issue, "estimate_value", extract_total_hour_month_day(params["estimate"])[0])
@@ -140,6 +154,53 @@ def calc_work_in_milestone(_milestone_issues):
             total += issue.estimate_value
 
     return total
+
+
+def calc_dependent_offsets(_objects):
+    total_obs = len(_objects)
+    solved_objects = []
+    unsolved_objects = []
+    for i in range(0, total_obs):
+        object = _objects[len(_objects)-1]
+        params = get_extra_attributes(object)
+        if "dependsOn" in params:
+            setattr(object, 'depends_on', params['dependsOn'])
+            setattr(object, 'dependent_offset', 0.0)
+            if object.depends_on.lower == 'none':
+                solved_objects.append(object)
+                _objects.remove(object)
+            else:
+                unsolved_objects.append(object)
+                _objects.remove(object)
+        else:
+            setattr(object, 'depends_on', 'none')
+            setattr(object, 'dependent_offset', 0.0)
+            solved_objects.append(object)
+            _objects.remove(object)
+
+    while len(solved_objects) < total_obs:
+        res = solve_unsolved(solved_objects, unsolved_objects)
+        solved_objects   = res[0]
+        unsolved_objects = res[1]
+
+    return solved_objects
+
+
+def solve_unsolved(_solved, _unsolved):
+    for unsol_obj in _unsolved:
+        for sol_obj in _solved:
+            if str(unsol_obj.depends_on) == str(sol_obj.number):
+                setattr(unsol_obj, 'dependent_offset', sol_obj.dependent_offset)
+                if hasattr(sol_obj, "estimate_value"):
+                    unsol_obj.dependent_offset += sol_obj.estimate_value
+                else:
+                    milestone_issues = gh.issues.list_by_repo(SHS, repoName, milestone=str(unsol_obj.number)).all()
+                    milestone_issues = calc_totals_for_issues(milestone_issues)
+                    unsol_obj.dependent_offset += calc_work_in_milestone(milestone_issues)
+                _solved.append(unsol_obj)
+                _unsolved.remove(unsol_obj)
+                break
+    return (_solved, _unsolved)
 
 
 def quick_provide_estimate(_issues):
@@ -165,23 +226,45 @@ def quick_provide_estimate(_issues):
 def create_gantt_chart():
     ret = GANTT_BEGIN
     _milestones = gh.issues.milestones.list(user=SHS, repo=repoName).all()
+    _milestones = calc_dependent_offsets(_milestones)
+    _milestones.sort(key=lambda x: x.dependent_offset, reverse=False)
+
     for i in range(0, len(_milestones)):
         milestone_issues = gh.issues.list_by_repo(SHS, repoName, milestone=str(_milestones[i].number)).all()
-        milestone_issues =  calc_totals_for_issues(milestone_issues)
+        milestone_issues = calc_totals_for_issues(milestone_issues)
         milestone_total = calc_work_in_milestone(milestone_issues)
-        duration = float(milestone_total)/float(HOURS_IN_WORK_DAY)/float(DAYS_IN_WORK_WEEK)
+        milestone_issues = calc_dependent_offsets(milestone_issues)
+        duration = 10.0 * float(milestone_total)/float(HOURS_IN_WORK_DAY)/float(DAYS_IN_WORK_WEEK)
+
+        mile_offset = 0.0
+
+        if hasattr(_milestones[i], "dependent_offset"):
+            mile_offset = 10.0 * float(_milestones[i].dependent_offset)/float(HOURS_IN_WORK_DAY)/float(DAYS_IN_WORK_WEEK)
+
         milestone_progress = 0
         if len(milestone_issues) > 0:
             milestone_progress = _milestones[i].closed_issues/len(milestone_issues)
-        ret += "\\ganttgroup[progress=" + str(milestone_progress) + "]{" + str(i) + ". " + _milestones[i].title + "}{0}{" + str(duration) + "}\\\\\n"
+        ret += "\\ganttgroup[progress=" + str(milestone_progress) + "]{" + str(i) + ". " + _milestones[i].title + "}{" + str(int(mile_offset)) + "}{" + str(int(duration + mile_offset)) + "}\\\\\n"
+
+        milestone_issues.sort(key=lambda x: x.dependent_offset, reverse=False)
+
         for j in range(0, len(milestone_issues)):
-            issue_duration = 0
+
+            issue_duration = 0.0
+
             if hasattr(milestone_issues[j], "estimate_value"):
-                issue_duration = float(milestone_issues[j].estimate_value)/float(HOURS_IN_WORK_DAY)/float(DAYS_IN_WORK_WEEK)
+                issue_duration = 10.0 * float(milestone_issues[j].estimate_value)/float(HOURS_IN_WORK_DAY)/float(DAYS_IN_WORK_WEEK)
+
+            issue_offset = 0.0
+
+            if hasattr(milestone_issues[j], "dependent_offset"):
+                issue_offset = 10.0 * float(milestone_issues[j].dependent_offset)/float(HOURS_IN_WORK_DAY)/float(DAYS_IN_WORK_WEEK)
+
             state = "0"
             if milestone_issues[j].state == "closed":
                 state="100"
-            ret += "\\ganttbar[progress=" + state + "]{" + str(i) + "." + str(j) + ". " + str(milestone_issues[j].title) + "}{0}{" + str(issue_duration) + "}\\\\\n"
+
+            ret += "\\ganttbar[progress=" + state + "]{" + str(i) + "." + str(j) + ". " + str(milestone_issues[j].title) + "}{" + str(int(issue_offset + mile_offset)) + "}{" + str(int(mile_offset + issue_offset + issue_duration)) + "}\\\\\n"
     ret+="\\end{ganttchart}\n"
     ret+="\\end{document}"
     return ret
