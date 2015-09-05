@@ -210,7 +210,11 @@ def quick_provide_estimate(_issues):
             valid_input_entered = False
 
             while not valid_input_entered:
-                input = raw_input("Enter estimate for (" + issue.milestone.title + ") " + issue.title + "(" + issue.body + ")")
+                milestone = ""
+                if hasattr(issue.milestone, "title"):
+                    milestone = issue.milestone.title
+
+                input = raw_input("Enter estimate for (" + milestone + ") " + issue.title + "(" + issue.body + ")")
 
                 parsed_hours = extract_total_hour_month_day(input)[0]
 
