@@ -23,14 +23,9 @@ repoName = args[1]
 username = args[2]
 password = args[3]
 
-out = '''\\documentclass{standalone}
+out = '''\\documentclass[tikz]{standalone}
 
 \\usepackage{hyperref}
-\\usepackage{tikz}
-
-% for matching content and document dimensions
-\\usepackage[paperwidth=\\maxdimen,paperheight=\\maxdimen]{geometry}
-\\usepackage[displaymath,tightp??age,active]{preview}
 
 % set default font to Helvetica
 \\RequirePackage[scaled]{helvet}
@@ -68,7 +63,6 @@ repo = gh.repos.get(user=SHS, repo=repoName)
 # Start the tree
 out += '''
 \\begin{document}
-\\begin{preview}
 \\begin{tikzpicture}
 \\node[root] {\href{'''+repo.html_url+'''}{''' + repoName + '''}}'''
 
@@ -104,7 +98,6 @@ for i in range(0, len(milestones)):
     for j in range(0, len(milestone_issues_array[i])):
         out += '''\\draw[-] (c''' + str(i) + '''.west) |- (c''' + str(i) +"_"+ str(j) + '''.west);\n'''
 out += '''\\end{tikzpicture}
-\\end{preview}
 \\end{document}'''
 
 target = open(repoName + "-Chart.tex", 'w')
