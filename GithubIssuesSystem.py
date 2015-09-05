@@ -268,7 +268,7 @@ def create_gantt_chart():
             if milestone_issues[j].state == "closed":
                 state="100"
 
-            ret += "\\ganttbar[progress=" + state + "]{" + str(i) + "." + str(j) + ". " + str(milestone_issues[j].title) + "}{" + str(int(issue_offset + mile_offset)) + "}{" + str(int(mile_offset + issue_offset + issue_duration)) + "}\\\\\n"
+            ret += "\\ganttbar[progress=" + state + "]{" + str(i) + "." + str(j) + ". " + str(milestone_issues[j].title) + "}{" + str(int(issue_offset + mile_offset + 1)) + "}{" + str(int(mile_offset + issue_offset + issue_duration)) + "}\\\\\n"
     ret+="\\end{ganttchart}\n"
     ret+="\\end{document}"
     return ret
