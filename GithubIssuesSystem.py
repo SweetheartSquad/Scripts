@@ -166,17 +166,15 @@ def calc_dependent_offsets(_objects):
         if "dependsOn" in params:
             setattr(object, 'depends_on', params['dependsOn'])
             setattr(object, 'dependent_offset', 0.0)
-            if object.depends_on.lower == 'none':
+            if object.depends_on.lower() == 'none':
                 solved_objects.append(object)
-                _objects.remove(object)
             else:
                 unsolved_objects.append(object)
-                _objects.remove(object)
         else:
             setattr(object, 'depends_on', 'none')
             setattr(object, 'dependent_offset', 0.0)
             solved_objects.append(object)
-            _objects.remove(object)
+        _objects.remove(object)
 
     while len(solved_objects) < total_obs:
         res = solve_unsolved(solved_objects, unsolved_objects)
@@ -194,7 +192,7 @@ def solve_unsolved(_solved, _unsolved):
                 if hasattr(sol_obj, "estimate_value"):
                     unsol_obj.dependent_offset += sol_obj.estimate_value
                 else:
-                    milestone_issues = gh.issues.list_by_repo(SHS, repoName, milestone=str(unsol_obj.number)).all()
+                    milestone_issues = gh.issues.list_by_repo(SHS, repoName, milestone=str(sol_obj.number)).all()
                     milestone_issues = calc_totals_for_issues(milestone_issues)
                     unsol_obj.dependent_offset += calc_work_in_milestone(milestone_issues)
                 _solved.append(unsol_obj)
@@ -248,7 +246,7 @@ def create_gantt_chart():
         milestone_progress = 0
         if len(milestone_issues) > 0:
             milestone_progress = _milestones[i].closed_issues/len(milestone_issues)
-        ret += "\\ganttgroup[progress=" + str(milestone_progress) + "]{" + str(i) + ". " + _milestones[i].title + "}{" + str(int(mile_offset)) + "}{" + str(int(duration + mile_offset)) + "}\\\\\n"
+        ret += "\\ganttgroup[progress=" + str(milestone_progress) + "]{" + str(i) + ". " + _milestones[i].title + "}{" + str(int(mile_offset + 1)) + "}{" + str(int(duration + mile_offset)) + "}\\\\\n"
 
         milestone_issues.sort(key=lambda x: x.dependent_offset, reverse=False)
 
@@ -274,6 +272,7 @@ def create_gantt_chart():
     return ret
 
 #issues_global = gh.issues.list_by_repo(SHS, repoName).all()
-quick_provide_estimate(gh.issues.list_by_repo(SHS, repoName).all())
+
+#quick_provide_estimate(gh.issues.list_by_repo(SHS, repoName).all())
 
 print create_gantt_chart()

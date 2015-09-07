@@ -88,7 +88,11 @@ for i in range(0, len(milestones)):
         else:
             nodeNumBelow = str(i)+"_"+str(j-1)
 
-        out += '''\\node [below= of c'''+nodeNumBelow+'''] (c'''+nodeNum+''') {\href{'''+latexEncode(issues[j].html_url)+'''}{''' +str(i)+"."+str(j)+". " + latexEncode(issues[j].title) + '''}};\n'''
+        assignee = issues[j].assignee
+        if assignee == None:
+            assignee = "None"
+
+        out += '''\\node [below= of c'''+nodeNumBelow+'''] (c'''+nodeNum+''') {\href{'''+latexEncode(issues[j].html_url)+'''}{''' +str(i)+"."+str(j)+". " + latexEncode(issues[j].title) + '''}\\newline Assignee: ''' + assignee + '''};\n'''
     out += '''\\newcounter{numIssues''' + str(i) + '''}
 \\setcounter{numIssues''' + str(i) + '''}{''' + str(max(0,len(issues)-1)) + '''}\n\n'''
 
@@ -99,6 +103,8 @@ for i in range(0, len(milestones)):
         out += '''\\draw[-] (c''' + str(i) + '''.west) |- (c''' + str(i) +"_"+ str(j) + '''.west);\n'''
 out += '''\\end{tikzpicture}
 \\end{document}'''
+
+print out
 
 target = open(repoName + "-Chart.tex", 'w')
 target.write(out)
