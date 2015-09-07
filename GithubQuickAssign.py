@@ -24,7 +24,12 @@ for issue in issues:
     valid = False
     if issue.assignee is None:
         while not valid:
-            assignee = raw_input("Enter assignee for (" + issue.milestone.title + ") " + issue.title + "(" + issue.body + ")")
+            milestone = issue.milestone
+            if milestone is not None:
+                milestone = milestone.title
+            else:
+                milestone = ""
+            assignee = raw_input("Enter assignee for (" + (milestone) + ") " + (issue.title or "") + "(" + (issue.body or "") + ")")
             try:
                 gh.users.get(user=assignee)
                 valid = True
