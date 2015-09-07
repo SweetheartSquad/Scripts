@@ -7,8 +7,14 @@ import copy
 
 SHS = 'SweetheartSquad'
 
+
+HOURS_IN_WORK_DAY = 8
+DAYS_IN_WORK_WEEK = 5
+
+mult = 10.0
+
 startTime = 0
-endTime = 240
+endTime = 500
 now = 6
 
 GANTT_BEGIN = '''
@@ -28,6 +34,8 @@ GANTT_BEGIN = '''
 \\begin{ganttchart}[
 y unit chart = 15,
 y unit title = 15,
+hgrid,
+vgrid,
 canvas/.append style={fill=none, draw=none, line width=.75pt},
 % title
 title/.style={draw=none, fill=none},
@@ -60,11 +68,8 @@ today rule/.style={
   line width=1pt
 }]{''' + str(startTime) + '''}{''' + str(endTime) + '''}
 \\gantttitle{Weeks}{''' + str(endTime) + '''}\\\\
-\\gantttitlelist{''' + str(startTime) + ''',...,''' + str(endTime) + '''}{1}\\\\
+\\gantttitlelist{''' + str(startTime) + ''',...,''' + str(int(endTime/mult)) + '''}{'''+str(int(mult))+'''}\\\\
 '''
-
-HOURS_IN_WORK_DAY = 8
-DAYS_IN_WORK_WEEK = 5
 
 def weeks_to_hours(weeks):
     return HOURS_IN_WORK_DAY * DAYS_IN_WORK_WEEK * float(weeks)
@@ -192,9 +197,19 @@ def solve_unsolved(_solved, _unsolved):
                 if hasattr(sol_obj, "estimate_value"):
                     unsol_obj.dependent_offset += sol_obj.estimate_value
                 else:
+                    issue_max = 0.0
                     milestone_issues = gh.issues.list_by_repo(SHS, repoName, milestone=str(sol_obj.number)).all()
                     milestone_issues = calc_totals_for_issues(milestone_issues)
-                    unsol_obj.dependent_offset += calc_work_in_milestone(milestone_issues)
+                    milestone_issues = calc_dependent_offsets(milestone_issues)
+                    for iss in milestone_issues:
+                        issue_duration = 0.0
+                        if hasattr(iss, "estimate_value"):
+                            issue_duration = float(iss.estimate_value)
+                        issue_offset = 0.0
+                        if hasattr(iss, "dependent_offset"):
+                            issue_offset = float(iss.dependent_offset)
+                        issue_max = max(issue_max, issue_duration + issue_offset)
+                    unsol_obj.dependent_offset += issue_max
                 _solved.append(unsol_obj)
                 _unsolved.remove(unsol_obj)
                 break
@@ -234,19 +249,29 @@ def create_gantt_chart():
     for i in range(0, len(_milestones)):
         milestone_issues = gh.issues.list_by_repo(SHS, repoName, milestone=str(_milestones[i].number)).all()
         milestone_issues = calc_totals_for_issues(milestone_issues)
-        milestone_total = calc_work_in_milestone(milestone_issues)
+        milestone_total =  calc_work_in_milestone(milestone_issues)
         milestone_issues = calc_dependent_offsets(milestone_issues)
-        duration = 10.0 * float(milestone_total)/float(HOURS_IN_WORK_DAY)/float(DAYS_IN_WORK_WEEK)
+        duration = mult * float(milestone_total)/float(HOURS_IN_WORK_DAY)/float(DAYS_IN_WORK_WEEK)
+
+        issue_max = 0.0
+        for iss in milestone_issues:
+            issue_duration = 0.0
+            if hasattr(iss, "estimate_value"):
+                issue_duration = mult * float(iss.estimate_value)/float(HOURS_IN_WORK_DAY)/float(DAYS_IN_WORK_WEEK)
+            issue_offset = 0.0
+            if hasattr(iss, "dependent_offset"):
+                issue_offset = mult * float(iss.dependent_offset)/float(HOURS_IN_WORK_DAY)/float(DAYS_IN_WORK_WEEK)
+            issue_max = max(issue_max, issue_duration + issue_offset)
 
         mile_offset = 0.0
 
         if hasattr(_milestones[i], "dependent_offset"):
-            mile_offset = 10.0 * float(_milestones[i].dependent_offset)/float(HOURS_IN_WORK_DAY)/float(DAYS_IN_WORK_WEEK)
+            mile_offset = mult * float(_milestones[i].dependent_offset)/float(HOURS_IN_WORK_DAY)/float(DAYS_IN_WORK_WEEK)
 
         milestone_progress = 0
         if len(milestone_issues) > 0:
             milestone_progress = _milestones[i].closed_issues/len(milestone_issues)
-        ret += "\\ganttgroup[progress=" + str(milestone_progress) + "]{" + str(i) + ". " + _milestones[i].title + "}{" + str(int(mile_offset + 1)) + "}{" + str(int(duration + mile_offset)) + "}\\\\\n"
+        ret += "\\ganttgroup[progress=" + str(milestone_progress) + "]{" + str(i) + ". " + _milestones[i].title + "}{" + str(int(mile_offset + 1)) + "}{" + str(mile_offset + issue_max) + "}\\\\\n"
 
         milestone_issues.sort(key=lambda x: x.dependent_offset, reverse=False)
 
@@ -255,12 +280,12 @@ def create_gantt_chart():
             issue_duration = 0.0
 
             if hasattr(milestone_issues[j], "estimate_value"):
-                issue_duration = 10.0 * float(milestone_issues[j].estimate_value)/float(HOURS_IN_WORK_DAY)/float(DAYS_IN_WORK_WEEK)
+                issue_duration = mult * float(milestone_issues[j].estimate_value)/float(HOURS_IN_WORK_DAY)/float(DAYS_IN_WORK_WEEK)
 
             issue_offset = 0.0
 
             if hasattr(milestone_issues[j], "dependent_offset"):
-                issue_offset = 10.0 * float(milestone_issues[j].dependent_offset)/float(HOURS_IN_WORK_DAY)/float(DAYS_IN_WORK_WEEK)
+                issue_offset = mult * float(milestone_issues[j].dependent_offset)/float(HOURS_IN_WORK_DAY)/float(DAYS_IN_WORK_WEEK)
 
             state = "0"
             if milestone_issues[j].state == "closed":

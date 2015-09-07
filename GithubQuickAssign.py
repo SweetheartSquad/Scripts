@@ -32,4 +32,3 @@ for issue in issues:
                 gh.issues.update(issue.number, data, user=SHS, repo=repo)
             except Exception:
                 print "Invalid user"
-                pass
