@@ -5,9 +5,6 @@ import sys
 import re
 import copy
 
-SHS = 'SweetheartSquad'
-
-
 HOURS_IN_WORK_DAY = 8
 DAYS_IN_WORK_WEEK = 5
 
@@ -79,12 +76,13 @@ def days_to_hours(days):
 
 args = sys.argv
 
-if len(args) < 3:
+if len(args) < 4:
     sys.exit("Expected args Repository Name, Username, Password")
 
-repoName = args[1]
-username = args[2]
-password = args[3]
+repoOwnerName = args[1]
+repoName = args[2]
+username = args[3]
+password = args[4]
 
 auth = dict(login=username, password=password)
 gh = Github(**auth)
@@ -96,7 +94,10 @@ def extract_total_hour_month_day(_input):
     week_regex  = re.compile(ur'([0-9]*[w W])')
 
     total_hours = 0
-
+    
+    # truncate argument list to the first element
+    _input = _input[0]
+    
     hours_match = hour_regex.findall(_input)
     days_match  = day_regex.findall(_input)
     weeks_match = week_regex.findall(_input)
@@ -121,22 +122,36 @@ def extract_total_hour_month_day(_input):
 
 def get_extra_attributes(_object):
     params  = dict()
-    regex   = re.compile(ur'(~[0-9 a-z A-Z]*:[0-9 a-z A-Z]*)')
+    #regex   = re.compile(ur'(~[0-9 a-z A-Z]*):((#?[0-9 a-z A-Z]*[;]?)*)')
+    regex   = re.compile(ur'~([0-9 a-z A-Z]*):\s?([#0-9a-zA-Z;]*)')
 
     matches = []
 
+    src  = None
     if hasattr(_object, "body"):
         if _object.body is not None:
-            matches = regex.findall(_object.body)
+            src = _object.body
     else:
         if _object.description is not None:
-            matches = regex.findall(_object.description)
+            src = _object.description
+            
+    print "Src: " + str(src.encode('ascii', 'ignore')) + "\n"
+            
+    matches = regex.findall(src)
 
+    print "Matches: " + str(matches) + "\n"
+    
+    # if the regex didn't capture any arguments, return None early
+    if len(matches) == 0:
+        return None
+    
     for match in matches:
-        match = match[1:]
-        key_val = match.split(":")
-        params[key_val[0]] = key_val[1]
-
+        key_val = match[0]
+        params[key_val] = match[1].replace("#","").split(";")
+    
+    
+    print "Params: " + str(params) + "\n"
+    
     return params
 
 
@@ -165,54 +180,66 @@ def calc_dependent_offsets(_objects):
     total_obs = len(_objects)
     solved_objects = []
     unsolved_objects = []
-    for i in range(0, total_obs):
+    while len(_objects) > 0:
         object = _objects[len(_objects)-1]
         params = get_extra_attributes(object)
-        if "dependsOn" in params:
+        if params == None:
+            setattr(object, 'depends_on', ['none'])
+            setattr(object, 'dependent_offset', 0.0)
+            solved_objects.append(object)
+        elif "dependsOn" in params:
             setattr(object, 'depends_on', params['dependsOn'])
             setattr(object, 'dependent_offset', 0.0)
-            if object.depends_on.lower() == 'none':
+            if object.depends_on[0].lower() == 'none':
                 solved_objects.append(object)
             else:
                 unsolved_objects.append(object)
         else:
-            setattr(object, 'depends_on', 'none')
+            setattr(object, 'depends_on', ['none'])
             setattr(object, 'dependent_offset', 0.0)
             solved_objects.append(object)
         _objects.remove(object)
 
-    while len(solved_objects) < total_obs:
+    while len(unsolved_objects) > 0:
         res = solve_unsolved(solved_objects, unsolved_objects)
         solved_objects   = res[0]
         unsolved_objects = res[1]
-
+        print "\n" + str(res)
     return solved_objects
 
 
 def solve_unsolved(_solved, _unsolved):
     for unsol_obj in _unsolved:
-        for sol_obj in _solved:
-            if str(unsol_obj.depends_on) == str(sol_obj.number):
-                setattr(unsol_obj, 'dependent_offset', sol_obj.dependent_offset)
-                if hasattr(sol_obj, "estimate_value"):
-                    unsol_obj.dependent_offset += sol_obj.estimate_value
-                else:
-                    issue_max = 0.0
-                    milestone_issues = gh.issues.list_by_repo(SHS, repoName, milestone=str(sol_obj.number)).all()
-                    milestone_issues = calc_totals_for_issues(milestone_issues)
-                    milestone_issues = calc_dependent_offsets(milestone_issues)
-                    for iss in milestone_issues:
-                        issue_duration = 0.0
-                        if hasattr(iss, "estimate_value"):
-                            issue_duration = float(iss.estimate_value)
-                        issue_offset = 0.0
-                        if hasattr(iss, "dependent_offset"):
-                            issue_offset = float(iss.dependent_offset)
-                        issue_max = max(issue_max, issue_duration + issue_offset)
-                    unsol_obj.dependent_offset += issue_max
-                _solved.append(unsol_obj)
-                _unsolved.remove(unsol_obj)
-                break
+        issue_max = 0
+        for dependency in unsol_obj.depends_on:
+            for sol_obj in _solved:
+                print unsol_obj.depends_on, sol_obj.number
+                if str(sol_obj.number) == dependency:
+                    setattr(unsol_obj, 'dependent_offset', sol_obj.dependent_offset)
+                    if hasattr(sol_obj, "estimate_value"):
+                       ### issues
+                       issue_max = max(issue_max, sol_obj.estimate_value)
+                       # unsol_obj.dependent_offset += sol_obj.estimate_value
+                    else:
+                        ### milestones
+                        milestone_max = 0.0
+                        milestone_issues = gh.issues.list_by_repo(repoOwnerName, repoName, milestone=str(sol_obj.number)).all()
+                        milestone_issues = calc_totals_for_issues(milestone_issues)
+                        milestone_issues = calc_dependent_offsets(milestone_issues)
+                        for iss in milestone_issues:
+                            issue_duration = 0.0
+                            if hasattr(iss, "estimate_value"):
+                                issue_duration = float(iss.estimate_value)
+                            issue_offset = 0.0
+                            if hasattr(iss, "dependent_offset"):
+                                issue_offset = float(iss.dependent_offset)
+                            milestone_max = max(milestone_max, issue_duration + issue_offset)
+                        unsol_obj.dependent_offset += milestone_max
+                        
+                    #break
+        _solved.append(unsol_obj)
+        _unsolved.remove(unsol_obj)
+        unsol_obj.dependent_offset += issue_max
     return (_solved, _unsolved)
 
 
@@ -234,7 +261,7 @@ def quick_provide_estimate(_issues):
                 if parsed_hours > 0:
                     issue.body += "\n~estimate:" + input
                     data = dict(body=issue.body)
-                    gh.issues.update(issue.number, data, user=SHS, repo=repoName)
+                    gh.issues.update(issue.number, data, user=repoOwnerName, repo=repoName)
                     valid_input_entered = True
                 else:
                     print "Invalid input must be in the format 1w2d3h, 2d3h, 3h, 1w, etc"
@@ -242,12 +269,12 @@ def quick_provide_estimate(_issues):
 
 def create_gantt_chart():
     ret = GANTT_BEGIN
-    _milestones = gh.issues.milestones.list(user=SHS, repo=repoName).all()
+    _milestones = gh.issues.milestones.list(user=repoOwnerName, repo=repoName).all()
     _milestones = calc_dependent_offsets(_milestones)
     _milestones.sort(key=lambda x: x.dependent_offset, reverse=False)
 
     for i in range(0, len(_milestones)):
-        milestone_issues = gh.issues.list_by_repo(SHS, repoName, milestone=str(_milestones[i].number)).all()
+        milestone_issues = gh.issues.list_by_repo(repoOwnerName, repoName, milestone=str(_milestones[i].number)).all()
         milestone_issues = calc_totals_for_issues(milestone_issues)
         milestone_total =  calc_work_in_milestone(milestone_issues)
         milestone_issues = calc_dependent_offsets(milestone_issues)
