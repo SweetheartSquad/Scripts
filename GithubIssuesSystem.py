@@ -223,7 +223,8 @@ def solve_unsolved(_solved, _unsolved):
                     else:
                         ### milestones
                         milestone_max = 0.0
-                        milestone_issues = gh.issues.list_by_repo(repoOwnerName, repoName, milestone=str(sol_obj.number)).all()
+                        milestone_issues = get_milestone_issues(str(sol_obj.number))
+
                         milestone_issues = calc_totals_for_issues(milestone_issues)
                         milestone_issues = calc_dependent_offsets(milestone_issues)
                         for iss in milestone_issues:
@@ -274,7 +275,8 @@ def create_gantt_chart():
     _milestones.sort(key=lambda x: x.dependent_offset, reverse=False)
 
     for i in range(0, len(_milestones)):
-        milestone_issues = gh.issues.list_by_repo(repoOwnerName, repoName, milestone=str(_milestones[i].number)).all()
+        milestone_issues = get_milestone_issues(str(_milestones[i].number))
+
         milestone_issues = calc_totals_for_issues(milestone_issues)
         milestone_total =  calc_work_in_milestone(milestone_issues)
         milestone_issues = calc_dependent_offsets(milestone_issues)
@@ -322,6 +324,20 @@ def create_gantt_chart():
     ret+="\\end{ganttchart}\n"
     ret+="\\end{document}"
     return ret
+
+
+def get_milestone_issues(_milestone):
+    open_issues = gh.issues.list_by_repo(repoOwnerName, repoName, milestone=str(_milestone), state='open').all()
+    closed_issues = gh.issues.list_by_repo(repoOwnerName, repoName, milestone=str(_milestone), state='closed').all()
+    milestone_issues = open_issues + closed_issues
+
+    ### TODO: check if issues are labeled as invalid or wontfix in order to ignore them
+
+    return milestone_issues
+
+
+
+
 
 #issues_global = gh.issues.list_by_repo(SHS, repoName).all()
 
