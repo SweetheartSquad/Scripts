@@ -223,7 +223,7 @@ def solve_unsolved(_solved, _unsolved):
                     else:
                         ### milestones
                         milestone_max = 0.0
-                        milestone_issues = get_milestone_issues(str(sol_obj.number))
+                        milestone_issues = get_milestone_issues(sol_obj)
 
                         milestone_issues = calc_totals_for_issues(milestone_issues)
                         milestone_issues = calc_dependent_offsets(milestone_issues)
@@ -275,10 +275,10 @@ def create_gantt_chart():
     _milestones.sort(key=lambda x: x.dependent_offset, reverse=False)
 
     for i in range(0, len(_milestones)):
-        milestone_issues = get_milestone_issues(str(_milestones[i].number))
+        milestone_issues = get_milestone_issues(_milestones[i])
 
         milestone_issues = calc_totals_for_issues(milestone_issues)
-        milestone_total =  calc_work_in_milestone(milestone_issues)
+        milestone_total = calc_work_in_milestone(milestone_issues)
         milestone_issues = calc_dependent_offsets(milestone_issues)
         duration = mult * float(milestone_total)/float(HOURS_IN_WORK_DAY)/float(DAYS_IN_WORK_WEEK)
 
@@ -297,9 +297,10 @@ def create_gantt_chart():
         if hasattr(_milestones[i], "dependent_offset"):
             mile_offset = mult * float(_milestones[i].dependent_offset)/float(HOURS_IN_WORK_DAY)/float(DAYS_IN_WORK_WEEK)
 
+        # calculate progress as a percentage of issues closed
         milestone_progress = 0
         if len(milestone_issues) > 0:
-            milestone_progress = _milestones[i].closed_issues/len(milestone_issues)
+            milestone_progress = _milestones[i].closed_issues*100/len(milestone_issues)
         ret += "\\ganttgroup[progress=" + str(milestone_progress) + "]{" + str(i) + ". " + _milestones[i].title + "}{" + str(int(mile_offset + 1)) + "}{" + str(mile_offset + issue_max) + "}\\\\\n"
 
         milestone_issues.sort(key=lambda x: x.dependent_offset, reverse=False)
@@ -327,11 +328,22 @@ def create_gantt_chart():
 
 
 def get_milestone_issues(_milestone):
-    open_issues = gh.issues.list_by_repo(repoOwnerName, repoName, milestone=str(_milestone), state='open').all()
-    closed_issues = gh.issues.list_by_repo(repoOwnerName, repoName, milestone=str(_milestone), state='closed').all()
+    open_issues = gh.issues.list_by_repo(repoOwnerName, repoName, milestone=str(_milestone.number), state='open').all()
+    closed_issues = gh.issues.list_by_repo(repoOwnerName, repoName, milestone=str(_milestone.number), state='closed').all()
+
+    # set state on issues locally and store number of open/closed issues on milestone
+    _milestone.closed_issues = 0
+    _milestone.open_issues = 0
+    for issue in open_issues:
+        setattr(issue, "state", "open")
+        _milestone.open_issues += 1
+    for issue in closed_issues:
+        setattr(issue, "state", "closed")
+        _milestone.closed_issues += 1
+
     milestone_issues = open_issues + closed_issues
 
-    ### TODO: check if issues are labeled as invalid or wontfix in order to ignore them
+    # TODO: check if issues are labeled as invalid or wontfix in order to ignore them
 
     return milestone_issues
 
