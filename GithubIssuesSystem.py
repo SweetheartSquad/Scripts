@@ -77,7 +77,7 @@ def days_to_hours(days):
 args = sys.argv
 
 if len(args) < 4:
-    sys.exit("Expected args Repository Name, Username, Password")
+    sys.exit("Expected args Repository Owner, Repository Name, Username, Password")
 
 repoOwnerName = args[1]
 repoName = args[2]
