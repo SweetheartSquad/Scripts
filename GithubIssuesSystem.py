@@ -1,9 +1,10 @@
-__author__ = 'ryan'
-
 from pygithub3 import Github
 import sys
 import re
 import copy
+import operator
+
+__author__ = 'ryan'
 
 HOURS_IN_WORK_DAY = 8
 DAYS_IN_WORK_WEEK = 5
@@ -68,8 +69,10 @@ today rule/.style={
 \\gantttitlelist{''' + str(startTime) + ''',...,''' + str(int(endTime/mult)) + '''}{'''+str(int(mult))+'''}\\\\
 '''
 
+
 def weeks_to_hours(weeks):
     return HOURS_IN_WORK_DAY * DAYS_IN_WORK_WEEK * float(weeks)
+
 
 def days_to_hours(days):
     return HOURS_IN_WORK_DAY * float(days)
@@ -117,17 +120,16 @@ def extract_total_hour_month_day(_input):
         if val.isdigit():
             total_hours += float(weeks_to_hours(val))
 
-    return(total_hours, hours_match, days_match, weeks_match)
+    return total_hours, hours_match, days_match, weeks_match
 
 
 def get_extra_attributes(_object):
-    params  = dict()
-    #regex   = re.compile(ur'(~[0-9 a-z A-Z]*):((#?[0-9 a-z A-Z]*[;]?)*)')
-    regex   = re.compile(ur'~([0-9 a-z A-Z]*):\s?([#0-9a-zA-Z;]*)')
+    params = dict()
+    # regex   = re.compile(ur'(~[0-9 a-z A-Z]*):((#?[0-9 a-z A-Z]*[;]?)*)')
+    regex = re.compile(ur'~([0-9a-zA-Z]*):\s?([#0-9a-zA-Z;]*)')
 
-    matches = []
-
-    src  = None
+    # retrieve an issue's body or a milestone's description as the source text for attributes
+    src = None
     if hasattr(_object, "body"):
         if _object.body is not None:
             src = _object.body
@@ -135,30 +137,30 @@ def get_extra_attributes(_object):
         if _object.description is not None:
             src = _object.description
             
-    print "Src: " + str(src.encode('ascii', 'ignore')) + "\n"
+    print "Src: " + str(src.encode('ascii', 'ignore'))
             
     matches = regex.findall(src)
 
-    print "Matches: " + str(matches) + "\n"
+    print "Matches: " + str(matches)
     
     # if the regex didn't capture any arguments, return None early
     if len(matches) == 0:
         return None
-    
+
+    # remove hashes from attributes and split into key-value pairs based on semi-colons
     for match in matches:
         key_val = match[0]
-        params[key_val] = match[1].replace("#","").split(";")
-    
-    
-    print "Params: " + str(params) + "\n"
+        params[key_val] = match[1].replace("#", "").split(";")
+
+    print "Params: " + str(params)
     
     return params
 
 
 def calc_totals_for_issues(_issues):
-    for issue in _issues :
+    for issue in _issues:
         params = get_extra_attributes(issue)
-        if("estimate" in params):
+        if "estimate" in params:
             setattr(issue, "estimate_literal", params["estimate"])
             setattr(issue, "estimate_value", extract_total_hour_month_day(params["estimate"])[0])
 
@@ -166,43 +168,42 @@ def calc_totals_for_issues(_issues):
     return _issues
 
 
+# calculates the duration of a milestone
+# duration is equal to the max of the
+# duration + the offset of each issue
 def calc_work_in_milestone(_milestone_issues):
-    totals = dict()
-    total  = 0
+    total = 0.0
     for issue in _milestone_issues:
+        issue_duration = 0.0
         if hasattr(issue, "estimate_value"):
-            total += issue.estimate_value
-
+            issue_duration = mult * float(issue.estimate_value)/float(HOURS_IN_WORK_DAY)/float(DAYS_IN_WORK_WEEK)
+        issue_offset = 0.0
+        if hasattr(issue, "dependent_offset"):
+            issue_offset = mult * float(issue.dependent_offset)/float(HOURS_IN_WORK_DAY)/float(DAYS_IN_WORK_WEEK)
+        total = max(total, issue_duration + issue_offset)
     return total
 
 
 def calc_dependent_offsets(_objects):
-    total_obs = len(_objects)
     solved_objects = []
     unsolved_objects = []
-    while len(_objects) > 0:
-        object = _objects[len(_objects)-1]
-        params = get_extra_attributes(object)
-        if params == None:
-            setattr(object, 'depends_on', ['none'])
-            setattr(object, 'dependent_offset', 0.0)
-            solved_objects.append(object)
-        elif "dependsOn" in params:
-            setattr(object, 'depends_on', params['dependsOn'])
-            setattr(object, 'dependent_offset', 0.0)
-            if object.depends_on[0].lower() == 'none':
-                solved_objects.append(object)
+    for obj in _objects:
+        params = get_extra_attributes(obj)
+        if "dependsOn" in params:
+            setattr(obj, 'depends_on', params['dependsOn'])
+            setattr(obj, 'dependent_offset', 0.0)
+            if obj.depends_on[0].lower() == 'none':
+                solved_objects.append(obj)
             else:
-                unsolved_objects.append(object)
+                unsolved_objects.append(obj)
         else:
-            setattr(object, 'depends_on', ['none'])
-            setattr(object, 'dependent_offset', 0.0)
-            solved_objects.append(object)
-        _objects.remove(object)
+            setattr(obj, 'depends_on', ['none'])
+            setattr(obj, 'dependent_offset', 0.0)
+            solved_objects.append(obj)
 
     while len(unsolved_objects) > 0:
         res = solve_unsolved(solved_objects, unsolved_objects)
-        solved_objects   = res[0]
+        solved_objects = res[0]
         unsolved_objects = res[1]
         print "\n" + str(res)
     return solved_objects
@@ -217,11 +218,11 @@ def solve_unsolved(_solved, _unsolved):
                 if str(sol_obj.number) == dependency:
                     setattr(unsol_obj, 'dependent_offset', sol_obj.dependent_offset)
                     if hasattr(sol_obj, "estimate_value"):
-                       ### issues
-                       issue_max = max(issue_max, sol_obj.estimate_value)
-                       # unsol_obj.dependent_offset += sol_obj.estimate_value
+                        # issues
+                        issue_max = max(issue_max, sol_obj.estimate_value)
+                        # unsol_obj.dependent_offset += sol_obj.estimate_value
                     else:
-                        ### milestones
+                        # milestones
                         milestone_max = 0.0
                         milestone_issues = get_milestone_issues(sol_obj)
 
@@ -237,17 +238,17 @@ def solve_unsolved(_solved, _unsolved):
                             milestone_max = max(milestone_max, issue_duration + issue_offset)
                         unsol_obj.dependent_offset += milestone_max
                         
-                    #break
+                    # break
         _solved.append(unsol_obj)
         _unsolved.remove(unsol_obj)
         unsol_obj.dependent_offset += issue_max
-    return (_solved, _unsolved)
+    return _solved, _unsolved
 
 
 def quick_provide_estimate(_issues):
     _issues = calc_totals_for_issues(_issues)
     for issue in _issues:
-        if hasattr(issue, "estimate_value") == False:
+        if not hasattr(issue, "estimate_value"):
             valid_input_entered = False
 
             while not valid_input_entered:
@@ -276,24 +277,14 @@ def create_gantt_chart():
 
     for i in range(0, len(_milestones)):
         milestone_issues = get_milestone_issues(_milestones[i])
-
         milestone_issues = calc_totals_for_issues(milestone_issues)
-        milestone_total = calc_work_in_milestone(milestone_issues)
         milestone_issues = calc_dependent_offsets(milestone_issues)
-        duration = mult * float(milestone_total)/float(HOURS_IN_WORK_DAY)/float(DAYS_IN_WORK_WEEK)
 
-        issue_max = 0.0
-        for iss in milestone_issues:
-            issue_duration = 0.0
-            if hasattr(iss, "estimate_value"):
-                issue_duration = mult * float(iss.estimate_value)/float(HOURS_IN_WORK_DAY)/float(DAYS_IN_WORK_WEEK)
-            issue_offset = 0.0
-            if hasattr(iss, "dependent_offset"):
-                issue_offset = mult * float(iss.dependent_offset)/float(HOURS_IN_WORK_DAY)/float(DAYS_IN_WORK_WEEK)
-            issue_max = max(issue_max, issue_duration + issue_offset)
+        # retrieve the milestone's duration
+        mile_duration = calc_work_in_milestone(milestone_issues)
 
+        # retrieve the milestone's starting point
         mile_offset = 0.0
-
         if hasattr(_milestones[i], "dependent_offset"):
             mile_offset = mult * float(_milestones[i].dependent_offset)/float(HOURS_IN_WORK_DAY)/float(DAYS_IN_WORK_WEEK)
 
@@ -301,9 +292,10 @@ def create_gantt_chart():
         milestone_progress = 0
         if len(milestone_issues) > 0:
             milestone_progress = _milestones[i].closed_issues*100/len(milestone_issues)
-        ret += "\\ganttgroup[progress=" + str(milestone_progress) + "]{" + str(i) + ". " + _milestones[i].title + "}{" + str(int(mile_offset + 1)) + "}{" + str(mile_offset + issue_max) + "}\\\\\n"
+        ret += "\\ganttgroup[progress=" + str(milestone_progress) + "]{" + str(i) + ". " + _milestones[i].title + "}{" + str(int(mile_offset + 1)) + "}{" + str(mile_offset + mile_duration) + "}\\\\\n"
 
-        milestone_issues.sort(key=lambda x: x.dependent_offset, reverse=False)
+        # sort the issues by start time and then by end time
+        milestone_issues.sort(key=operator.attrgetter('dependent_offset', 'estimate_value'), reverse=False)
 
         for j in range(0, len(milestone_issues)):
 
@@ -322,8 +314,8 @@ def create_gantt_chart():
                 state="100"
 
             ret += "\\ganttbar[progress=" + state + "]{" + str(i) + "." + str(j) + ". " + str(milestone_issues[j].title) + "}{" + str(int(issue_offset + mile_offset + 1)) + "}{" + str(int(mile_offset + issue_offset + issue_duration)) + "}\\\\\n"
-    ret+="\\end{ganttchart}\n"
-    ret+="\\end{document}"
+    ret += "\\end{ganttchart}\n"
+    ret += "\\end{document}"
     return ret
 
 
@@ -343,7 +335,7 @@ def get_milestone_issues(_milestone):
 
     milestone_issues = open_issues + closed_issues
 
-    # TODO: check if issues are labeled as invalid or wontfix in order to ignore them
+    # TODO: check if issues are labeled as invalid, duplicate, or wontfix in order to ignore them
 
     return milestone_issues
 
