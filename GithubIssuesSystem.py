@@ -335,16 +335,23 @@ def get_milestone_issues(_milestone):
 
     milestone_issues = open_issues + closed_issues
 
-    # TODO: check if issues are labeled as invalid, duplicate, or wontfix in order to ignore them
+    # append issues which don't have invalid labels to the result
+    invalid_labels = ["invalid", "duplicate", "wontfix"]
+    res = []
+    for issue in milestone_issues:
+        labels = gh.issues.labels.list_by_issue(issue.number, repoOwnerName, repoName)
+        valid = True
+        for label in labels:
+            if label.name in invalid_labels:
+                valid = False
+                break
+        if valid:
+            res.append(issue)
 
-    return milestone_issues
+    return res
 
+# issues_global = gh.issues.list_by_repo(SHS, repoName).all()
 
-
-
-
-#issues_global = gh.issues.list_by_repo(SHS, repoName).all()
-
-#quick_provide_estimate(gh.issues.list_by_repo(SHS, repoName).all())
+# quick_provide_estimate(gh.issues.list_by_repo(SHS, repoName).all())
 
 print create_gantt_chart()
