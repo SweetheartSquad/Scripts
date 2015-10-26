@@ -125,17 +125,16 @@ def extract_total_hour_month_day(_input):
 
 def get_extra_attributes(_object):
     params = dict()
-    # regex   = re.compile(ur'(~[0-9 a-z A-Z]*):((#?[0-9 a-z A-Z]*[;]?)*)')
     regex = re.compile(ur'~([0-9a-zA-Z]*):\s?([#0-9a-zA-Z;]*)')
 
     # retrieve an issue's body or a milestone's description as the source text for attributes
-    src = None
     if hasattr(_object, "body"):
-        if _object.body is not None:
-            src = _object.body
+        src = _object.body
+    elif hasattr(_object, "description"):
+        src = _object.description
     else:
-        if _object.description is not None:
-            src = _object.description
+        # no source text to search for attributes, so return None early
+        return None
             
     print "Src: " + str(src.encode('ascii', 'ignore'))
             
@@ -174,12 +173,8 @@ def calc_totals_for_issues(_issues):
 def calc_work_in_milestone(_milestone_issues):
     total = 0.0
     for issue in _milestone_issues:
-        issue_duration = 0.0
-        if hasattr(issue, "estimate_value"):
-            issue_duration = mult * float(issue.estimate_value)/float(HOURS_IN_WORK_DAY)/float(DAYS_IN_WORK_WEEK)
-        issue_offset = 0.0
-        if hasattr(issue, "dependent_offset"):
-            issue_offset = mult * float(issue.dependent_offset)/float(HOURS_IN_WORK_DAY)/float(DAYS_IN_WORK_WEEK)
+        issue_duration = mult * float(issue.estimate_value)/float(HOURS_IN_WORK_DAY)/float(DAYS_IN_WORK_WEEK) if hasattr(issue, "estimate_value") else 0.0
+        issue_offset = mult * float(issue.dependent_offset)/float(HOURS_IN_WORK_DAY)/float(DAYS_IN_WORK_WEEK) if hasattr(issue, "dependent_offset") else 0.0
         total = max(total, issue_duration + issue_offset)
     return total
 
@@ -208,6 +203,7 @@ def calc_dependent_offsets(_objects):
         print "\n" + str(res)
     return solved_objects
 
+
 def solve_unsolved(_solved, _unsolved):
     for unsol_obj in _unsolved:
         issue_max = 0
@@ -232,12 +228,8 @@ def solve_unsolved(_solved, _unsolved):
                         milestone_issues = calc_totals_for_issues(milestone_issues)
                         milestone_issues = calc_dependent_offsets(milestone_issues)
                         for iss in milestone_issues:
-                            issue_duration = 0.0
-                            if hasattr(iss, "estimate_value"):
-                                issue_duration = float(iss.estimate_value)
-                            issue_offset = 0.0
-                            if hasattr(iss, "dependent_offset"):
-                                issue_offset = float(iss.dependent_offset)
+                            issue_duration = float(iss.estimate_value) if hasattr(iss, "estimate_value") else 0.0
+                            issue_offset = float(iss.dependent_offset) if hasattr(iss, "dependent_offset") else 0.0
                             milestone_max = max(milestone_max, issue_duration + issue_offset)
                         unsol_obj.dependent_offset += milestone_max
                     # individual dependency solved
@@ -295,14 +287,10 @@ def create_gantt_chart():
         mile_duration = calc_work_in_milestone(milestone_issues)
 
         # retrieve the milestone's starting point
-        mile_offset = 0.0
-        if hasattr(_milestones[i], "dependent_offset"):
-            mile_offset = mult * float(_milestones[i].dependent_offset)/float(HOURS_IN_WORK_DAY)/float(DAYS_IN_WORK_WEEK)
+        mile_offset = mult * float(_milestones[i].dependent_offset)/float(HOURS_IN_WORK_DAY)/float(DAYS_IN_WORK_WEEK) if hasattr(_milestones[i], "dependent_offset") else 0.0
 
         # calculate progress as a percentage of issues closed
-        milestone_progress = 0
-        if len(milestone_issues) > 0:
-            milestone_progress = _milestones[i].closed_issues*100/len(milestone_issues)
+        milestone_progress = _milestones[i].closed_issues*100/len(milestone_issues) if len(milestone_issues) > 0 else 0.0
         ret += "\\ganttgroup[progress=" + str(milestone_progress) + "]{" + str(i) + ". " + _milestones[i].title + "}{" + str(int(mile_offset + 1)) + "}{" + str(mile_offset + mile_duration) + "}\\\\\n"
 
         # sort the issues by start time and then by end time
@@ -310,19 +298,9 @@ def create_gantt_chart():
 
         for j in range(0, len(milestone_issues)):
 
-            issue_duration = 0.0
-
-            if hasattr(milestone_issues[j], "estimate_value"):
-                issue_duration = mult * float(milestone_issues[j].estimate_value)/float(HOURS_IN_WORK_DAY)/float(DAYS_IN_WORK_WEEK)
-
-            issue_offset = 0.0
-
-            if hasattr(milestone_issues[j], "dependent_offset"):
-                issue_offset = mult * float(milestone_issues[j].dependent_offset)/float(HOURS_IN_WORK_DAY)/float(DAYS_IN_WORK_WEEK)
-
-            state = "0"
-            if milestone_issues[j].state == "closed":
-                state="100"
+            issue_duration = mult * float(milestone_issues[j].estimate_value)/float(HOURS_IN_WORK_DAY)/float(DAYS_IN_WORK_WEEK) if hasattr(milestone_issues[j], "estimate_value") else 0.0
+            issue_offset = mult * float(milestone_issues[j].dependent_offset)/float(HOURS_IN_WORK_DAY)/float(DAYS_IN_WORK_WEEK) if hasattr(milestone_issues[j], "dependent_offset") else 0.0
+            state = "100" if milestone_issues[j].state == "closed" else "0"
 
             ret += "\\ganttbar[progress=" + state + "]{" + str(i) + "." + str(j) + ". " + str(milestone_issues[j].title) + "}{" + str(int(issue_offset + mile_offset + 1)) + "}{" + str(int(mile_offset + issue_offset + issue_duration)) + "}\\\\\n"
     ret += "\\end{ganttchart}\n"
