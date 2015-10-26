@@ -208,14 +208,17 @@ def calc_dependent_offsets(_objects):
         print "\n" + str(res)
     return solved_objects
 
-
 def solve_unsolved(_solved, _unsolved):
     for unsol_obj in _unsolved:
         issue_max = 0
+        num_dependencies = len(unsol_obj.depends_on)
+        num_dependencies_solved = 0
+        is_solved = False
         for dependency in unsol_obj.depends_on:
             for sol_obj in _solved:
-                print unsol_obj.depends_on, sol_obj.number
+                print str(unsol_obj) + " depends on " + str(dependency) + ", checking against " + str(sol_obj.number)
                 if str(sol_obj.number) == dependency:
+                    num_dependencies_solved += 1
                     setattr(unsol_obj, 'dependent_offset', sol_obj.dependent_offset)
                     if hasattr(sol_obj, "estimate_value"):
                         # issues
@@ -237,11 +240,19 @@ def solve_unsolved(_solved, _unsolved):
                                 issue_offset = float(iss.dependent_offset)
                             milestone_max = max(milestone_max, issue_duration + issue_offset)
                         unsol_obj.dependent_offset += milestone_max
-                        
-                    # break
-        _solved.append(unsol_obj)
-        _unsolved.remove(unsol_obj)
-        unsol_obj.dependent_offset += issue_max
+                    # individual dependency solved
+                    break
+            if num_dependencies_solved == num_dependencies:
+                # all dependencies for unsolved object solved
+                is_solved = True
+                break
+        if is_solved:
+            _solved.append(unsol_obj)
+            _unsolved.remove(unsol_obj)
+            unsol_obj.dependent_offset += issue_max
+
+    print "solved: " + str(_solved)
+    print "unsolved: " + str(_unsolved)
     return _solved, _unsolved
 
 
