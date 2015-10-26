@@ -189,7 +189,7 @@ def calc_dependent_offsets(_objects):
     unsolved_objects = []
     for obj in _objects:
         params = get_extra_attributes(obj)
-        if "dependsOn" in params:
+        if params is not None and "dependsOn" in params:
             setattr(obj, 'depends_on', params['dependsOn'])
             setattr(obj, 'dependent_offset', 0.0)
             if obj.depends_on[0].lower() == 'none':
