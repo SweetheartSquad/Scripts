@@ -2,14 +2,15 @@ import maya.cmds as cmds
 import json
 import os
 import math
+import logging
 
-component = {
-    "id":0,
-    "type":"",
-    "src":"",
-    "connectors":[]
-}
+logging.basicConfig(level=logging.DEBUG)
 
+if 'window' in globals():
+    if cmds.window(window, exists=True):
+        cmds.deleteUI(window, window=True)
+
+component = None
 furniture = None
 
 jsonRepresentationInput = None
@@ -19,31 +20,31 @@ typeInput = None
 objNameInput = None
 loadComponentsMenu = None
 loadFurnitureButton = None
+layout = None
+window = cmds.window(title='Furniture Component Builder', width=500, height=500)
 
 furnitureFile = None
 furnitureFilePath = None
 
-if 'window' in globals():
+
+def initUi():
+
+    global component
+    component = {
+        "id":0,
+        "type":"",
+        "src":"",
+        "connectors":[]
+    }
+
+    global window
     if cmds.window(window, exists=True):
         cmds.deleteUI(window, window=True)
+        window = cmds.window(title='Furniture Component Builder', width=500, height=500)
 
-window = cmds.window(title='Furniture Component Builder', width=500, height=500)
+    layout = cmds.columnLayout(adjustableColumn=True)
 
-
-def isclose(a, b, rel_tol=1e-09, abs_tol=0.0):
-    return abs(a-b) <= max(rel_tol * max(abs(a), abs(b)), abs_tol)
-
-def loadFurniture():
-    filename = cmds.fileDialog2(fileMode=1, fileFilter="*.json", caption="Open Furniture JSON")
-    global furnitureFile
-    global furnitureFilePath
-    furnitureFilePath = filename[0]
-    with open(filename[0], "r") as furnitureFile:
-        furnJson = furnitureFile.read()
-    global furniture
-    furniture = json.loads(furnJson)
-
-    cmds.button(label='New Component')
+    cmds.button(label='New Component', command='loadFurniture(furnitureFilePath)')
 
     cmds.rowLayout(nc=2, adjustableColumn=True)
     global loadComponentsMenu
@@ -83,19 +84,35 @@ def loadFurniture():
     cmds.columnLayout(adjustableColumn=True)
     cmds.text( label='OBJ File Name' )
     global objNameInput
-    objNameInput = cmds.textField()
+    objNameInput = cmds.textField(cc="objChange()")
     cmds.setParent('..')
     cmds.button(label='Save OBJ', command='exportObj()')
     cmds.setParent('..')
 
     cmds.setParent('..')
 
-    cmds.deleteUI(loadFurnitureButton)
-
     menuItems = cmds.optionMenu(loadComponentsMenu, q=True, itemListLong=True)
-    
     if menuItems:
         cmds.deleteUI(menuItems)
+    cmds.showWindow(window)
+
+def isclose(a, b, rel_tol=1e-09, abs_tol=0.0):
+    return abs(a-b) <= max(rel_tol * max(abs(a), abs(b)), abs_tol)
+
+def loadFurniture(filePath=None):
+    cmds.file(new=True, pm=False, force=True)
+    if(filePath == None):
+        filename = cmds.fileDialog2(fileMode=1, fileFilter="*.json", caption="Open Furniture JSON")
+        global furnitureFile
+        global furnitureFilePath
+        furnitureFilePath = filename[0]
+        with open(filename[0], "r") as furnitureFile:
+            furnJson = furnitureFile.read()
+        global furniture
+        furniture = json.loads(furnJson)
+        cmds.deleteUI(loadFurnitureButton)
+
+    initUi()
 
     id = 0
     for comp in furniture['components']:
@@ -131,6 +148,11 @@ def loadSelectedObj():
 def updateJson():
     cmds.textField(jsonRepresentationInput, text=json.dumps(component), e=True)
 
+def objChange():
+    textVal = cmds.textField(objNameInput, q=True, tx=True)
+    component["src"] = textVal + ".obj"
+    updateJson()
+
 def getConnectorTypes():
     types = []
     for con in component["connectors"]:
@@ -151,9 +173,7 @@ def selectLocators():
     objects = cmds.ls(tr=True)
     for pos in getConnectorForType(selected)["positions"]:
         for obj in objects:
-            trans = cmds.xform(obj, q=1, ws=1, rp=1)
-            print pos 
-            print trans 
+            trans = cmds.xform(obj, q=1, ws=1, rp=1) 
             if isclose(round(trans[0], 3), round(pos["positionX"], 3)) and isclose(round(trans[1], 3), round(pos["positionY"], 3)) and isclose(round(trans[2], 3), round(pos["positionZ"], 3)):
                 cmds.select(obj, add=True)
 
@@ -203,26 +223,44 @@ def genConnectors():
 def exportObj():
     try:
         fileName = cmds.textField(objNameInput, q=True, tx=True).split(".")[0] + ".obj"
-        print os.path.split(furnitureFilePath)[0] + "/meshes/furniture/" + fileName
         cmds.file(os.path.split(furnitureFilePath)[0] + "/meshes/furniture/" + fileName, pr=1, typ="OBJexport", es=1, op="groups=0; ptgroups=0; materials=0; smoothing=0; normals=1")
+        logging.info("Obj Save Success") 
     except:
         cmds.error("Could not save OBJ - Make sure the plugin is loaded")
 
 def saveJson():
+
+    typeVal = cmds.textField(typeInput, tx=True, q=True)
+    
+    if len(typeVal) == 0:
+        cmds.error("Type must be specifed") 
+        return
+
+    objFile = cmds.textField(objNameInput, tx=True, q=True)
+
+    if len(objFile) == 0:
+        cmds.error("Obj file must be specified")
+    else:
+        if not os.path.isfile(os.path.split(furnitureFilePath)[0] + "/meshes/furniture/" + objFile + ".obj"):
+            cmds.error("Obj file must exist")
+            return
+
     found = False
     for comp in furniture["components"]:
         if comp["id"] == component["id"]:
             found = True
             comp = component
             fileName = cmds.textField(objNameInput, q=True, tx=True).split(".")[0] + ".obj"
-            comp["src"] = (os.path.split(furnitureFilePath)[0] + "/meshes/furniture/" + fileName)
+            comp["src"] = fileName
     if not found:
         furniture["components"].append(component)
     with open(furnitureFilePath, "w+") as furnitureFile:
         furnitureFile.write(json.dumps(furniture, indent=4, sort_keys=True))
+        logging.info("Json Save Success") 
 
-cmds.columnLayout(adjustableColumn=True)
+layout = cmds.columnLayout(adjustableColumn=True)
 
 loadFurnitureButton = cmds.button("Load Furniture Definitions", command='loadFurniture()')
+
 cmds.showWindow(window)
 
