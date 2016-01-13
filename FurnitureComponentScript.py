@@ -18,9 +18,17 @@ componentTypeInput = None
 typeInput = None
 objNameInput = None
 loadComponentsMenu = None
+loadFurnitureButton = None
 
 furnitureFile = None
 furnitureFilePath = None
+
+if 'window' in globals():
+    if cmds.window(window, exists=True):
+        cmds.deleteUI(window, window=True)
+
+window = cmds.window(title='Furniture Component Builder', width=500, height=500)
+
 
 def isclose(a, b, rel_tol=1e-09, abs_tol=0.0):
     return abs(a-b) <= max(rel_tol * max(abs(a), abs(b)), abs_tol)
@@ -30,18 +38,71 @@ def loadFurniture():
     global furnitureFile
     global furnitureFilePath
     furnitureFilePath = filename[0]
-    furnitureFile = open(filename[0], "a+")
-    furnJson = furnitureFile.read()
+    with open(filename[0], "r") as furnitureFile:
+        furnJson = furnitureFile.read()
     global furniture
     furniture = json.loads(furnJson)
+
+    cmds.button(label='New Component')
+
+    cmds.rowLayout(nc=2, adjustableColumn=True)
+    global loadComponentsMenu
+    loadComponentsMenu = cmds.optionMenu()
+    cmds.button(label='Load Component', command='loadSelectedObj()')
+    cmds.setParent('..')
+
+    cmds.text( label='Type' )
+    global typeInput 
+    typeInput = cmds.textField(cc="updateComponentType()")
+
+    cmds.rowLayout(nc=2, adjustableColumn=True)
+    global componentsMenu
+    componentsMenu = cmds.optionMenu(cc="selectLocators()")
+    cmds.button(label='Set Connectors', command='genConnectors()')
+    cmds.setParent('..')
+
+    cmds.rowLayout(nc=2, adjustableColumn=True)
+    cmds.columnLayout(adjustableColumn=True)
+    cmds.text( label='New Connector Type' )
+    global componentTypeInput
+    componentTypeInput = cmds.textField()
+    cmds.setParent('..')
+    cmds.button(label='Add Connector Type', command='addOutComp()')
+    cmds.setParent('..')
+
+    cmds.rowLayout(nc=2, adjustableColumn=True)
+    cmds.columnLayout(adjustableColumn=True)
+    cmds.text( label='JSON' )
+    global jsonRepresentationInput
+    jsonRepresentationInput = cmds.textField()
+    cmds.setParent('..')
+    cmds.button(label='Save JSON', command='saveJson()')
+    cmds.setParent('..')
+
+    cmds.rowLayout(nc=2, adjustableColumn=True)
+    cmds.columnLayout(adjustableColumn=True)
+    cmds.text( label='OBJ File Name' )
+    global objNameInput
+    objNameInput = cmds.textField()
+    cmds.setParent('..')
+    cmds.button(label='Save OBJ', command='exportObj()')
+    cmds.setParent('..')
+
+    cmds.setParent('..')
+
+    cmds.deleteUI(loadFurnitureButton)
 
     menuItems = cmds.optionMenu(loadComponentsMenu, q=True, itemListLong=True)
     
     if menuItems:
         cmds.deleteUI(menuItems)
 
+    id = 0
     for comp in furniture['components']:
         cmds.menuItem(p=loadComponentsMenu, label=comp["type"] + "-" + comp["src"])
+        id = max(id, comp["id"])
+    id += 1 
+    component['id'] = id
 
 def loadSelectedObj():
     cmds.file(new=True, pm=False, force=True)
@@ -50,7 +111,7 @@ def loadSelectedObj():
     global furnitureFilePath
     path = os.path.split(furnitureFilePath)[0] + "/meshes/furniture/"
     menuItems = cmds.optionMenu(componentsMenu, q=True, itemListLong=True)
-    cmds.textField(objNameInput, tx=path + selected, e=True)
+    cmds.textField(objNameInput, tx=selected.split(".")[0], e=True)
     if menuItems:
         cmds.deleteUI(menuItems)
     for comp in furniture["components"] :
@@ -142,60 +203,26 @@ def genConnectors():
 def exportObj():
     try:
         fileName = cmds.textField(objNameInput, q=True, tx=True).split(".")[0] + ".obj"
-        cmds.file("c:/" + fileName, pr=1, typ="OBJexport", es=1, op="groups=0; ptgroups=0; materials=0; smoothing=0; normals=1")
+        print os.path.split(furnitureFilePath)[0] + "/meshes/furniture/" + fileName
+        cmds.file(os.path.split(furnitureFilePath)[0] + "/meshes/furniture/" + fileName, pr=1, typ="OBJexport", es=1, op="groups=0; ptgroups=0; materials=0; smoothing=0; normals=1")
     except:
         cmds.error("Could not save OBJ - Make sure the plugin is loaded")
 
-if 'window' in globals():
-    if cmds.window(window, exists=True):
-        cmds.deleteUI(window, window=True)
-
-window = cmds.window(title='Furniture Component Builder', width=500, height=500)
+def saveJson():
+    found = False
+    for comp in furniture["components"]:
+        if comp["id"] == component["id"]:
+            found = True
+            comp = component
+            fileName = cmds.textField(objNameInput, q=True, tx=True).split(".")[0] + ".obj"
+            comp["src"] = (os.path.split(furnitureFilePath)[0] + "/meshes/furniture/" + fileName)
+    if not found:
+        furniture["components"].append(component)
+    with open(furnitureFilePath, "w+") as furnitureFile:
+        furnitureFile.write(json.dumps(furniture, indent=4, sort_keys=True))
 
 cmds.columnLayout(adjustableColumn=True)
 
-cmds.button("Load Furniture Definitions", command='loadFurniture()')
-
-cmds.rowLayout(nc=2, adjustableColumn=True)
-loadComponentsMenu = cmds.optionMenu()
-cmds.button(label='Load Component', command='loadSelectedObj()')
-cmds.setParent('..')
-
-cmds.text( label='Type' )
-typeInput = cmds.textField(cc="updateComponentType()")
-
-cmds.rowLayout(nc=2, adjustableColumn=True)
-componentsMenu = cmds.optionMenu(cc="selectLocators()")
-cmds.button(label='Set Connectors', command='genConnectors()')
-cmds.setParent('..')
-
-cmds.rowLayout(nc=2, adjustableColumn=True)
-cmds.columnLayout(adjustableColumn=True)
-cmds.text( label='New Out Component Type' )
-componentTypeInput = cmds.textField()
-cmds.setParent('..')
-cmds.button(label='Add Connector Type', command='addOutComp()')
-cmds.setParent('..')
-
-cmds.rowLayout(nc=2, adjustableColumn=True)
-cmds.columnLayout(adjustableColumn=True)
-cmds.text( label='JSON' )
-jsonRepresentationInput = cmds.textField()
-cmds.setParent('..')
-cmds.button(label='Save JSON', command='saveJson()')
-cmds.setParent('..')
-
-cmds.rowLayout(nc=2, adjustableColumn=True)
-cmds.columnLayout(adjustableColumn=True)
-cmds.text( label='OBJ File Name' )
-objNameInput = cmds.textField()
-cmds.setParent('..')
-cmds.button(label='Save OBJ', command='exportObj()')
-cmds.setParent('..')
-
-cmds.setParent('..')
-
+loadFurnitureButton = cmds.button("Load Furniture Definitions", command='loadFurniture()')
 cmds.showWindow(window)
-
-
 
