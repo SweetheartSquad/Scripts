@@ -206,6 +206,7 @@ def addOutComp():
 
 def genConnectors():
     connector = getConnectorForType(cmds.optionMenu(componentsMenu, q=True, v=True))
+    connector["positions"] = []
     if connector != None:
         locators = cmds.ls(transforms=True, selection=True)
         for locator in locators:
