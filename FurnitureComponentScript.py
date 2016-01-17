@@ -10,18 +10,18 @@ if 'window' in globals():
     if cmds.window(window, exists=True):
         cmds.deleteUI(window, window=True)
 
-component = None
+currentComponent = None
 furniture = None
 
 jsonRepresentationInput = None
-componentsMenu = None
-componentTypeInput = None
+currentComponentsMenu = None
+currentComponentTypeInput = None
 typeInput = None
 objNameInput = None
-loadComponentsMenu = None
+loadcurrentComponentsMenu = None
 loadFurnitureButton = None
 layout = None
-window = cmds.window(title='Furniture Component Builder', width=500, height=500)
+window = cmds.window(title='Furniture currentComponent Builder', width=500, height=500)
 
 furnitureFile = None
 furnitureFilePath = None
@@ -29,8 +29,8 @@ furnitureFilePath = None
 
 def initUi():
 
-    global component
-    component = {
+    global currentComponent
+    currentComponent = {
         "id":0,
         "type":"",
         "src":"",
@@ -53,7 +53,7 @@ def initUi():
     cmds.setParent('..')
 
     cmds.text( label='Type' )
-    global typeInput 
+    global typeInput
     typeInput = cmds.textField(cc="updateComponentType()")
 
     cmds.rowLayout(nc=2, adjustableColumn=True)
@@ -119,8 +119,8 @@ def loadFurniture(filePath=None):
 
         cmds.menuItem(p=loadComponentsMenu, label=comp["src"])
         id = max(id, comp["id"])
-    id += 1 
-    component['id'] = id
+    id += 1
+    currentComponent['id'] = id
 
 def loadSelectedObj():
     cmds.file(new=True, pm=False, force=True)
@@ -134,40 +134,40 @@ def loadSelectedObj():
         cmds.deleteUI(menuItems)
     for comp in furniture["components"] :
         if comp["src"] == selected :
-            global component 
+            global currentComponent
             componentDef = ""
-            
+
             with open(os.path.split(furnitureFilePath)[0]+"/"+comp["src"], "r") as componentFile:
                 componentDef = componentFile.read()
-            component = json.loads(componentDef)
-           
-            cmds.file(path + component["src"], i=True)    
-            for con in component["connectors"]:
+            currentComponent = json.loads(componentDef)
+
+            cmds.file(path + currentComponent["src"], i=True)
+            for con in currentComponent["connectors"]:
                 cmds.menuItem(p=componentsMenu, label=con["componentType"])
                 for pos in con["positions"]:
                     loc = cmds.spaceLocator()
                     cmds.move(pos[0], pos[1], pos[2], loc )
     updateJson()
     selectLocators()
-    cmds.textField(typeInput, tx=component["type"], e=True)
+    cmds.textField(typeInput, tx=currentComponent["type"], e=True)
 
 def updateJson():
-    cmds.textField(jsonRepresentationInput, text=json.dumps(component), e=True)
+    cmds.textField(jsonRepresentationInput, text=json.dumps(currentComponent), e=True)
 
 def objChange():
     textVal = cmds.textField(objNameInput, q=True, tx=True)
-    component["src"] = textVal + ".obj"
+    currentComponent["src"] = textVal + ".obj"
     updateJson()
 
 def getConnectorTypes():
     types = []
-    for con in component["connectors"]:
+    for con in currentComponent["connectors"]:
         types.append(con["componentType"])
     return types
 
 
 def getConnectorForType(compType):
-    for con in component["connectors"]:
+    for con in currentComponent["connectors"]:
         if con["componentType"] == compType:
             return con
     return None
@@ -179,13 +179,13 @@ def selectLocators():
     objects = cmds.ls(tr=True)
     for pos in getConnectorForType(selected)["positions"]:
         for obj in objects:
-            trans = cmds.xform(obj, q=1, ws=1, rp=1) 
+            trans = cmds.xform(obj, q=1, ws=1, rp=1)
             if isclose(round(trans[0], 3), round(pos[0], 3)) and isclose(round(trans[1], 3), round(pos[1], 3)) and isclose(round(trans[2], 3), round(pos[2], 3)):
                 cmds.select(obj, add=True)
 
 
 def updateComponentType():
-    component["type"] = cmds.textField(typeInput, q=True, tx=True).lower()
+    currentComponent["type"] = cmds.textField(typeInput, q=True, tx=True).lower()
     updateJson()
 
 def addOutComp():
@@ -194,7 +194,7 @@ def addOutComp():
         if(len(newType) > 0):
             newType = newType.lower()
             newConnector = {"componentType":newType, "positions":[]}
-            component["connectors"].append(newConnector)
+            currentComponent["connectors"].append(newConnector)
 
             menuItems = cmds.optionMenu(componentsMenu, q=True, itemListLong=True)
 
@@ -227,16 +227,16 @@ def exportObj():
     try:
         fileName = cmds.textField(objNameInput, q=True, tx=True).split(".")[0] + ".obj"
         cmds.file(os.path.split(furnitureFilePath)[0] + "/meshes/furniture/" + fileName, pr=1, typ="OBJexport", es=1, op="groups=0; ptgroups=0; materials=0; smoothing=0; normals=1")
-        logging.info("Obj Save Success") 
+        logging.info("Obj Save Success")
     except:
         cmds.error("Could not save OBJ - Make sure the plugin is loaded")
 
 def saveJson():
 
     typeVal = cmds.textField(typeInput, tx=True, q=True)
-    
+
     if len(typeVal) == 0:
-        cmds.error("Type must be specifed") 
+        cmds.error("Type must be specifed")
         return
 
     objFile = cmds.textField(objNameInput, tx=True, q=True)
@@ -250,16 +250,31 @@ def saveJson():
 
     found = False
     for comp in furniture["components"]:
-        if comp["id"] == component["id"]:
+        if comp["id"] == currentComponent["id"]:
             found = True
-            comp = component
+            comp = currentComponent
             fileName = cmds.textField(objNameInput, q=True, tx=True).split(".")[0] + ".obj"
+            with open(os.path.split(furnitureFilePath)[0] + "/furnitureJson/"+cmds.textField(objNameInput, q=True, tx=True).split(".")[0] + ".json", "w+") as furnitureFile:
+                furnitureFile.write(json.dumps(furniture, indent=4, sort_keys=True))
+                logging.info("Json Save Success")
             comp["src"] = fileName
+            print os.path.split(furnitureFilePath)[0] + "/furnitureJson/"+cmds.textField(objNameInput, q=True, tx=True).split(".")[0] + ".json"
     if not found:
-        furniture["components"].append(component)
+        comp = currentComponent
+        fileName = cmds.textField(objNameInput, q=True, tx=True).split(".")[0] + ".obj"
+        with open(os.path.split(furnitureFilePath)[0] + "/furnitureJson/"+cmds.textField(objNameInput, q=True, tx=True).split(".")[0] + ".json", "w+") as furnitureFile:
+            furnitureFile.write(json.dumps(comp, indent=4, sort_keys=True))
+            logging.info("Json Save Success")
+        comp["src"] = fileName
+        newFurniture = {'id':currentComponent["id"],"src":"furnitureJson/"+cmds.textField(objNameInput, q=True, tx=True).split(".")[0] + ".json"}
+        furniture["components"].append(newFurniture)
+        print os.path.split(furnitureFilePath)[0] + "/furnitureJson/"+cmds.textField(objNameInput, q=True, tx=True).split(".")[0] + ".json"
+
+
+
     with open(furnitureFilePath, "w+") as furnitureFile:
         furnitureFile.write(json.dumps(furniture, indent=4, sort_keys=True))
-        logging.info("Json Save Success") 
+        logging.info("Json Save Success")
 
 layout = cmds.columnLayout(adjustableColumn=True)
 
