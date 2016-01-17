@@ -116,14 +116,15 @@ def loadFurniture(filePath=None):
 
     id = 0
     for comp in furniture['components']:
-        cmds.menuItem(p=loadComponentsMenu, label=comp["type"] + "-" + comp["src"])
+
+        cmds.menuItem(p=loadComponentsMenu, label=comp["src"])
         id = max(id, comp["id"])
     id += 1 
     component['id'] = id
 
 def loadSelectedObj():
     cmds.file(new=True, pm=False, force=True)
-    selected = cmds.optionMenu(loadComponentsMenu, q=True, v=True).split("-")[1]
+    selected = cmds.optionMenu(loadComponentsMenu, q=True, v=True)
     global furniture
     global furnitureFilePath
     path = os.path.split(furnitureFilePath)[0] + "/meshes/furniture/"
@@ -133,9 +134,14 @@ def loadSelectedObj():
         cmds.deleteUI(menuItems)
     for comp in furniture["components"] :
         if comp["src"] == selected :
-            cmds.file(path + selected, i=True)    
             global component 
-            component = comp
+            componentDef = ""
+            
+            with open(os.path.split(furnitureFilePath)[0]+"/"+comp["src"], "r") as componentFile:
+                componentDef = componentFile.read()
+            component = json.loads(componentDef)
+           
+            cmds.file(path + component["src"], i=True)    
             for con in component["connectors"]:
                 cmds.menuItem(p=componentsMenu, label=con["componentType"])
                 for pos in con["positions"]:
