@@ -140,7 +140,7 @@ def loadSelectedObj():
                 cmds.menuItem(p=componentsMenu, label=con["componentType"])
                 for pos in con["positions"]:
                     loc = cmds.spaceLocator()
-                    cmds.move(pos["positionX"], pos["positionY"], pos["positionZ"], loc )
+                    cmds.move(pos[0], pos[1], pos[2], loc )
     updateJson()
     selectLocators()
     cmds.textField(typeInput, tx=component["type"], e=True)
@@ -174,7 +174,7 @@ def selectLocators():
     for pos in getConnectorForType(selected)["positions"]:
         for obj in objects:
             trans = cmds.xform(obj, q=1, ws=1, rp=1) 
-            if isclose(round(trans[0], 3), round(pos["positionX"], 3)) and isclose(round(trans[1], 3), round(pos["positionY"], 3)) and isclose(round(trans[2], 3), round(pos["positionZ"], 3)):
+            if isclose(round(trans[0], 3), round(pos[0], 3)) and isclose(round(trans[1], 3), round(pos[1], 3)) and isclose(round(trans[2], 3), round(pos[2], 3)):
                 cmds.select(obj, add=True)
 
 
@@ -211,11 +211,7 @@ def genConnectors():
         locators = cmds.ls(transforms=True, selection=True)
         for locator in locators:
             trans = cmds.xform(locator, q=1, ws=1, rp=1)
-            pos = {}
-            pos["positionX"] = trans[0]
-            pos["positionY"] = trans[1]
-            pos["positionZ"] = trans[2]
-            connector["positions"].append(pos)
+            connector["positions"].append(trans)
 
         updateJson()
     else :
