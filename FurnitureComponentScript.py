@@ -100,7 +100,7 @@ def isclose(a, b, rel_tol=1e-09, abs_tol=0.0):
     return abs(a-b) <= max(rel_tol * max(abs(a), abs(b)), abs_tol)
 
 def loadFurniture(filePath=None):
-    cmds.file(new=True, pm=False, force=True)
+    #cmds.file(new=True, pm=False, force=True)
     if(filePath == None):
         filename = cmds.fileDialog2(fileMode=1, fileFilter="*.json", caption="Open Furniture JSON")
         global furnitureFile
