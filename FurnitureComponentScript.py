@@ -35,14 +35,6 @@ def initUi():
         "type":"",
         "src":"",
         "connectors":[
-            {"componentTypes":[],
-            "out":[
-                {
-                    "position":[],
-                    "scale":[],
-                    "rotation":[]
-                }
-            ]}
         ]
     }
 
@@ -53,7 +45,7 @@ def initUi():
 
     layout = cmds.columnLayout(adjustableColumn=True)
 
-    cmds.button(label='New Component', command='loadFurniture(furnitureFilePath)')
+    cmds.button(label='New Component', command='newComponent()')
 
     cmds.rowLayout(nc=2, adjustableColumn=True)
     global loadComponentsMenu
@@ -61,7 +53,7 @@ def initUi():
     cmds.button(label='Load Component', command='loadSelectedObj()')
     cmds.setParent('..')
 
-    cmds.text( label='Type' )
+    cmds.text( label='Component Type' )
     global typeInput
     typeInput = cmds.textField(cc="updateComponentType()")
 
@@ -108,6 +100,10 @@ def initUi():
 #deals with floating pointers
 def isclose(a, b, rel_tol=1e-09, abs_tol=0.0):
     return abs(a-b) <= max(rel_tol * max(abs(a), abs(b)), abs_tol)
+
+def newComponent():
+    cmds.file(new=True, pm=False, force=True)
+    loadFurniture(furnitureFilePath)
 
 def loadFurniture(filePath=None):
     #cmds.file(new=True, pm=False, force=True)
@@ -212,7 +208,7 @@ def addOutComp():
     if(getConnectorForType(newType) == None):
         if(len(newType) > 0):
             newType = newType.lower()
-            newConnector = {"componentType":newType, "out":{"position":[],"scale":[],"rotation":[]}}
+            newConnector = {"componentTypes":[newType], "out":{"position":[],"scale":[],"rotation":[]}}
             currentComponent["connectors"].append(newConnector)
 
             menuItems = cmds.optionMenu(componentsMenu, q=True, itemListLong=True)
@@ -245,6 +241,8 @@ def genConnectors():
         updateJson()
     else :
         cmds.error("Connector Type is invalid")
+        
+    print currentComponent["connectors"]
 
 def exportObj():
     try:
@@ -263,7 +261,14 @@ def saveJson():
         return
 
     objFile = cmds.textField(objNameInput, tx=True, q=True)
-
+    
+    typeString = cmds.textField(typeInput, tx=True, q=True)
+    
+    typeArray = typeString.split(",")
+    #for type in typeArray:
+        #for con in currentComponent["connectors"]:
+            #con["componentTypes"].append(type.strip())
+    
     if len(objFile) == 0:
         cmds.error("Obj file must be specified")
     else:
