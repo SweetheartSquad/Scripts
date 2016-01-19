@@ -135,7 +135,7 @@ def loadSelectedObj():
     global furnitureFilePath
     path = os.path.split(furnitureFilePath)[0] + "/meshes/furniture/"
     menuItems = cmds.optionMenu(componentsMenu, q=True, itemListLong=True)
-    cmds.textField(objNameInput, tx=selected.split(".")[0], e=True)
+    cmds.textField(objNameInput, tx=selected.split(".")[0].split("/")[1], e=True)
     if menuItems:
         cmds.deleteUI(menuItems)
     for comp in furniture["components"] :
@@ -161,6 +161,7 @@ def loadSelectedObj():
     cmds.textField(typeInput, tx=currentComponent["type"], e=True)
 
 def updateJson():
+    print currentComponent
     cmds.textField(jsonRepresentationInput, text=json.dumps(currentComponent), e=True)
 
 def objChange():
@@ -181,7 +182,7 @@ def getConnectorForType(compType):
     for con in currentComponent["connectors"]: # for connectors within the current component object
         for compTypes in con["componentTypes"]: #for the component types that connect to the object
             if compTypes == compType: #if the component type match with the component type passed into function
-                print con
+                #print con
                 return con #return the connecting component
     return None
 
@@ -190,13 +191,17 @@ def selectLocators():
     cmds.select(clear=True)
     selected = cmds.optionMenu(componentsMenu, q=True, v=True) #selected equals select option in componenetsMenu
     objects = cmds.ls(tr=True) #create objects list
-    for out in selected: #for out object (see json) in selected, get the positions of the connectors
-        for outCon in getConnectorForType(selected)["out"]: #for each out objects, get the position which is an array of x,y,z,
-             for pos in outCon["position"]:   
-                for obj in objects: #for obj in objects list compare them to the components in the scene and see if they match up
-                    trans = cmds.xform(obj, q=1, ws=1, rp=1)
-                    if isclose(round(trans[0], 3), round(outCon["position"][0], 3)) and isclose(round(trans[1], 3), round(outCon["position"][1], 3)) and isclose(round(trans[2], 3), round(outCon["position"][2], 3)):
-                        cmds.select(obj, add=True)
+    for con in currentComponent["connectors"]:
+        for type in con["componentTypes"]:
+            if type == selected:
+                print getConnectorForType(selected)
+                for outObj in getConnectorForType(selected)["out"]: #for each out objects, get the position which is an array of x,y,z,  
+                    
+                    for obj in objects: #for obj in objects list compare them to the components in the scene and see if they match up
+                        trans = cmds.xform(obj, q=1, ws=1, rp=1)
+                        if len(outObj["position"]) > 0:
+                            if isclose(round(trans[0], 3), round(outObj["position"][0], 3)) and isclose(round(trans[1], 3), round(outObj["position"][1], 3)) and isclose(round(trans[2], 3), round(outObj["position"][2], 3)):
+                                cmds.select(obj, add=True)
 
 
 def updateComponentType():
@@ -208,7 +213,7 @@ def addOutComp():
     if(getConnectorForType(newType) == None):
         if(len(newType) > 0):
             newType = newType.lower()
-            newConnector = {"componentTypes":[newType], "out":{"position":[],"scale":[],"rotation":[]}}
+            newConnector = {"componentTypes":[newType], "out":[{"position":[],"scale":[],"rotation":[]}]}
             currentComponent["connectors"].append(newConnector)
 
             menuItems = cmds.optionMenu(componentsMenu, q=True, itemListLong=True)
@@ -227,22 +232,32 @@ def addOutComp():
 
 def genConnectors():
     connector = getConnectorForType(cmds.optionMenu(componentsMenu, q=True, v=True))
-    connector["out"]["position"] = []
-    if connector != None:
-        locators = cmds.ls(transforms=True, selection=True)
-        for locator in locators:
-            trans = cmds.xform(locator, q=1, ws=1, rp=1)
-            rot = cmds.xform(locator, q=1, ws=1, ro=1)
-            scal = cmds.xform(locator, q=1, ws=1, s=1)
-            connector["out"]["position"].append(trans)
-            connector["out"]["rotation"].append(rot)
-            connector["out"]["scale"].append(scal)
 
+    
+    rotation = []
+    scale = []
+    print connector
+    if connector != None:
+        locator = cmds.ls(transforms=True, selection=True)
+        connector["out"] = []
+        for i in range(0, len(locator)):
+            trans = cmds.xform(locator[i], q=1, ws=1, rp=1)
+            rot = cmds.xform(locator[i], q=1, ws=1, ro=1)
+            scal = cmds.xform(locator[i], q=1, ws=1, s=1)
+            
+            obj = {
+                "position": trans,
+                "rotation": rot,
+                "scale": scal
+            }
+            
+            connector["out"].append(obj)
+            print "made it"
         updateJson()
     else :
         cmds.error("Connector Type is invalid")
         
-    print currentComponent["connectors"]
+   # print currentComponent["connectors"]
 
 def exportObj():
     try:
@@ -276,33 +291,31 @@ def saveJson():
             cmds.error("Obj file must exist")
             return
 
+   
+    componentPath = os.path.split(furnitureFilePath)[0] + "/furnitureJson/"+cmds.textField(objNameInput, q=True, tx=True).split(".")[0] + ".json"
+    print componentPath
+    
+    comp = currentComponent
+    fileName = cmds.textField(objNameInput, q=True, tx=True).split(".")[0] + ".obj"
+    with open(componentPath, "w+") as componentJsonFile:
+        componentJsonFile.write(json.dumps(comp, indent=4, sort_keys=True))
+        logging.info("Json Save Success")
+    comp["src"] = fileName
     found = False
     for comp in furniture["components"]:
         if comp["id"] == currentComponent["id"]:
             found = True
-            comp = currentComponent
-            fileName = cmds.textField(objNameInput, q=True, tx=True).split(".")[0] + ".obj"
-            with open(os.path.split(furnitureFilePath)[0] + "/furnitureJson/"+cmds.textField(objNameInput, q=True, tx=True).split(".")[0] + ".json", "w+") as furnitureFile:
-                furnitureFile.write(json.dumps(furniture, indent=4, sort_keys=True))
-                logging.info("Json Save Success")
-            comp["src"] = fileName
-            print os.path.split(furnitureFilePath)[0] + "/furnitureJson/"+cmds.textField(objNameInput, q=True, tx=True).split(".")[0] + ".json"
+            break
+           # print os.path.split(furnitureFilePath)[0] + "/furnitureJson/"+cmds.textField(objNameInput, q=True, tx=True).split(".")[0] + ".json"
     if not found:
-        comp = currentComponent
-        fileName = cmds.textField(objNameInput, q=True, tx=True).split(".")[0] + ".obj"
-        with open(os.path.split(furnitureFilePath)[0] + "/furnitureJson/"+cmds.textField(objNameInput, q=True, tx=True).split(".")[0] + ".json", "w+") as furnitureFile:
-            furnitureFile.write(json.dumps(comp, indent=4, sort_keys=True))
-            logging.info("Json Save Success")
-        comp["src"] = fileName
+        
         newFurniture = {'id':currentComponent["id"],"src":"furnitureJson/"+cmds.textField(objNameInput, q=True, tx=True).split(".")[0] + ".json"}
         furniture["components"].append(newFurniture)
-        print os.path.split(furnitureFilePath)[0] + "/furnitureJson/"+cmds.textField(objNameInput, q=True, tx=True).split(".")[0] + ".json"
 
-
-
-    with open(furnitureFilePath, "w+") as furnitureFile:
-        furnitureFile.write(json.dumps(furniture, indent=4, sort_keys=True))
-        logging.info("Json Save Success")
+        #open furniture.json and adds new component to list
+        with open(furnitureFilePath, "w+") as furnitureJsonFile:
+            furnitureJsonFile.write(json.dumps(furniture, indent=4, sort_keys=True))
+            logging.info("Json Save Success")
 
 layout = cmds.columnLayout(adjustableColumn=True)
 
