@@ -34,7 +34,16 @@ def initUi():
         "id":0,
         "type":"",
         "src":"",
-        "connectors":[]
+        "connectors":[
+            {"componentTypes":[],
+            "out":[
+                {
+                    "position":[],
+                    "scale":[],
+                    "rotation":[]
+                }
+            ]}
+        ]
     }
 
     global window
@@ -96,6 +105,7 @@ def initUi():
         cmds.deleteUI(menuItems)
     cmds.showWindow(window)
 
+#deals with floating pointers
 def isclose(a, b, rel_tol=1e-09, abs_tol=0.0):
     return abs(a-b) <= max(rel_tol * max(abs(a), abs(b)), abs_tol)
 
@@ -142,11 +152,14 @@ def loadSelectedObj():
             currentComponent = json.loads(componentDef)
 
             cmds.file(path + currentComponent["src"], i=True)
-            for con in currentComponent["connectors"]:
-                cmds.menuItem(p=componentsMenu, label=con["componentType"])
-                for pos in con["positions"]:
+            for con in currentComponent["connectors"]: #for connectors in the current objects connectors
+                for types in con["componentTypes"]:
+                    cmds.menuItem(p=componentsMenu, label=types)
+                for jnt in con["out"]:
                     loc = cmds.spaceLocator()
-                    cmds.move(pos[0], pos[1], pos[2], loc )
+                    cmds.move(jnt["position"][0], jnt["position"][1], jnt["position"][2], loc)
+                    cmds.scale(jnt["scale"][0], jnt["scale"][1], jnt["scale"][2], loc)
+                    cmds.rotate(jnt["rotation"][0], jnt["rotation"][1], jnt["rotation"][2], loc)
     updateJson()
     selectLocators()
     cmds.textField(typeInput, tx=currentComponent["type"], e=True)
@@ -159,29 +172,35 @@ def objChange():
     currentComponent["src"] = textVal + ".obj"
     updateJson()
 
+
 def getConnectorTypes():
     types = []
-    for con in currentComponent["connectors"]:
-        types.append(con["componentType"])
+    for con in currentComponent["connectors"]: # for connectors within the current component object
+        for compTypes in con["componentTypes"]: #for the component types that connect to the object, add them to the types array and return
+            types.append(compTypes)
     return types
 
 
 def getConnectorForType(compType):
-    for con in currentComponent["connectors"]:
-        if con["componentType"] == compType:
-            return con
+    for con in currentComponent["connectors"]: # for connectors within the current component object
+        for compTypes in con["componentTypes"]: #for the component types that connect to the object
+            if compTypes == compType: #if the component type match with the component type passed into function
+                print con
+                return con #return the connecting component
     return None
 
 
 def selectLocators():
     cmds.select(clear=True)
-    selected = cmds.optionMenu(componentsMenu, q=True, v=True)
-    objects = cmds.ls(tr=True)
-    for pos in getConnectorForType(selected)["positions"]:
-        for obj in objects:
-            trans = cmds.xform(obj, q=1, ws=1, rp=1)
-            if isclose(round(trans[0], 3), round(pos[0], 3)) and isclose(round(trans[1], 3), round(pos[1], 3)) and isclose(round(trans[2], 3), round(pos[2], 3)):
-                cmds.select(obj, add=True)
+    selected = cmds.optionMenu(componentsMenu, q=True, v=True) #selected equals select option in componenetsMenu
+    objects = cmds.ls(tr=True) #create objects list
+    for out in selected: #for out object (see json) in selected, get the positions of the connectors
+        for outCon in getConnectorForType(selected)["out"]: #for each out objects, get the position which is an array of x,y,z,
+             for pos in outCon["position"]:   
+                for obj in objects: #for obj in objects list compare them to the components in the scene and see if they match up
+                    trans = cmds.xform(obj, q=1, ws=1, rp=1)
+                    if isclose(round(trans[0], 3), round(outCon["position"][0], 3)) and isclose(round(trans[1], 3), round(outCon["position"][1], 3)) and isclose(round(trans[2], 3), round(outCon["position"][2], 3)):
+                        cmds.select(obj, add=True)
 
 
 def updateComponentType():
@@ -193,7 +212,7 @@ def addOutComp():
     if(getConnectorForType(newType) == None):
         if(len(newType) > 0):
             newType = newType.lower()
-            newConnector = {"componentType":newType, "positions":[]}
+            newConnector = {"componentType":newType, "out":{"position":[],"scale":[],"rotation":[]}}
             currentComponent["connectors"].append(newConnector)
 
             menuItems = cmds.optionMenu(componentsMenu, q=True, itemListLong=True)
@@ -212,12 +231,16 @@ def addOutComp():
 
 def genConnectors():
     connector = getConnectorForType(cmds.optionMenu(componentsMenu, q=True, v=True))
-    connector["positions"] = []
+    connector["out"]["position"] = []
     if connector != None:
         locators = cmds.ls(transforms=True, selection=True)
         for locator in locators:
             trans = cmds.xform(locator, q=1, ws=1, rp=1)
-            connector["positions"].append(trans)
+            rot = cmds.xform(locator, q=1, ws=1, ro=1)
+            scal = cmds.xform(locator, q=1, ws=1, s=1)
+            connector["out"]["position"].append(trans)
+            connector["out"]["rotation"].append(rot)
+            connector["out"]["scale"].append(scal)
 
         updateJson()
     else :
